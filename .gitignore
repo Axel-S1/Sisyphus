@@ -1,0 +1,17 @@
+# ── Secrets & local env (R8: never commit) ─────────────────────────
+.env
+ports.env
+
+# ── Spec-mandated ignores ──────────────────────────────────────────
+storage/hermes_data/**/sessions/
+storage/hermes_data/**/logs/
+storage/goose_data/**
+storage/paperclip_data/
+execution-plane/workspace/*
+!execution-plane/workspace/.gitkeep
+
+# ── General hygiene ────────────────────────────────────────────────
+node_modules/
+__pycache__/
+*.pyc
+.DS_Store

@@ -1,0 +1,4 @@
+# Placeholder — the real Docker Compose stack (PostgreSQL, Drizzle migrations,
+# Paperclip control plane) is defined in Phase 3.
+version: "3.9"
+services: {}
