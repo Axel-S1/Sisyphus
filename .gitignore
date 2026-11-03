@@ -6,7 +6,10 @@ ports.env
 storage/hermes_data/**/sessions/
 storage/hermes_data/**/logs/
 storage/goose_data/**
-storage/paperclip_data/
+!storage/goose_data/**/
+!storage/goose_data/**/.gitkeep
+storage/paperclip_data/*
+!storage/paperclip_data/.gitkeep
 execution-plane/workspace/*
 !execution-plane/workspace/.gitkeep
 
