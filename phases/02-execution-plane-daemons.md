@@ -106,6 +106,14 @@ missing.
 
 ### 3. Write systemd units — `execution-plane/scripts/systemd/`
 
+> ⚠️ **DEPRECATED (2026-11-04, ADR-07).** The persistent systemd daemons were
+> superseded by the **Host Launcher Micro-API** (`execution-plane/scripts/launcher.py`,
+> port 9000) introduced by ADR-07: daemons are now spawned on demand via
+> `run.sh`/`run.ps1` and terminated after a 10-minute idle timeout, instead of
+> running continuously under systemd. The systemd templates below are kept for
+> historical reference only — **do not install them**. Phase 3 Task 0 builds the
+> launcher; its auto-restart (relaunch on demand) replaces `Restart=on-failure`.
+
 `goose-serve@.service` (template, one instance per profile):
 
 ```ini
@@ -192,8 +200,12 @@ differs; the goal is: HTTP endpoint answers an `initialize` handshake.)
       spec §8). Run with plain `GOOSE_PATH_ROOT` unset in a throwaway shell
       to confirm profiles do *not* touch `~/.config/goose/`.
 - [ ] `run.sh` hard-fails when `GOOSE_PATH_ROOT`/`HERMES_HOME` cannot be set.
-- [ ] systemd units installed, `daemon-reload` done, services auto-restart on
-      failure (`Restart=on-failure`).
+- [x] ~~systemd units installed, `daemon-reload` done, services auto-restart on
+      failure (`Restart=on-failure`)~~ — **DEPRECATED by ADR-07**: persistent
+      systemd daemons are obsolete; the Host Launcher Micro-API (Phase 3
+      Task 0) provides on-demand spawn + idle-timeout teardown instead.
+      Daemons run via `run.sh`/`run.ps1` (validated by the handshake and
+      collision tests above).
 - [ ] No daemon was ever started with `goose acp`.
 
 ## Common pitfalls

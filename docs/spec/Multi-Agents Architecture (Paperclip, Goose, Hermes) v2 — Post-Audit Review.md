@@ -345,6 +345,11 @@ services:
 
 ### 5.3 Host systemd service — Goose ACP example
 
+> ⚠️ **DEPRECATED (post-v2.1, ADR-07).** Persistent systemd daemons are
+> superseded by the Host Launcher Micro-API (`launcher.py`, :9000), which
+> spawns `run.sh`/`run.ps1` on demand and tears daemons down after a 10-minute
+> idle timeout. The unit example below is historical reference only.
+
 ```ini
 # /etc/systemd/system/goose-serve@.service
 # One instance per profile: systemctl start goose-serve@dev

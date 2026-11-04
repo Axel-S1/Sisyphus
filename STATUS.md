@@ -74,13 +74,12 @@ Goose ACP client. Recorded endpoints for that phase:
    the durable contract (HTTP endpoint, one port per profile) stays intact.
    `hermes acp` exists but is stdio-only (same Risk R9 class as `goose acp`)
    — never use it for the network daemon.
-2. **systemd units not installed** — installer needs sudo (no passwordless
-   sudo available to the agent). Run manually:
-   ```bash
-   sudo ./execution-plane/scripts/systemd/install-systemd.sh
-   systemctl start goose-serve@dev goose-serve@reviewer
-   ```
-   Until then, the daemons run via `run.sh` foreground/nohup.
+2. ~~**systemd units not installed** — installer needs sudo (no passwordless
+   sudo available to the agent)~~ — **RESOLVED / OBSOLETE (2026-11-04)**:
+   systemd daemons are officially deprecated by ADR-07 (Host Launcher
+   Micro-API). The unit templates and `install-systemd.sh` have been removed
+   from the repo; daemons are spawned on demand by the launcher via
+   `run.sh`/`run.ps1` and torn down after a 10-minute idle timeout.
 3. **`run.ps1` unverified** — no `pwsh` on this host; logic mirrors the tested
    `run.sh` but has never executed.
 4. **Paperclip not yet built/obtained** — nothing exists in
