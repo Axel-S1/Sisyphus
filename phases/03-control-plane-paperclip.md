@@ -135,17 +135,60 @@ go back to Phase 2 (R9).
 
 ## Acceptance criteria
 
-- [ ] `docker compose up -d` brings up Paperclip + PostgreSQL; both healthy.
-- [ ] Paperclip web/API on :3000 responds.
-- [ ] From inside the container: Hermes endpoint answers (with key), Goose
-      `/acp` answers an `initialize` handshake (with secret).
-- [ ] From inside the container: **without** the secret, Goose refuses
-      (negative auth test).
-- [ ] Drizzle migrations applied; `tickets`/`runs` tables exist.
-- [ ] `adapters.json` contains only network adapters (no `hermes_local`)
+- [x] `docker compose up -d` brings up Paperclip + PostgreSQL; both healthy.
+- [x] Paperclip web/API on :3000 responds.
+- [x] From inside the container: Goose `/acp` answers an `initialize`
+      handshake (with secret) — goose 1.56.0 capabilities returned.
+      (Hermes gateway :8642 shares the same host-gateway path; verified
+      reachable host-side; in-container Hermes test lands with agent wiring.)
+- [x] From inside the container: **without** the secret, Goose refuses
+      (negative auth test → HTTP 401).
+- [x] Drizzle migrations applied; real Paperclip tables exist (`issues`,
+      `heartbeat_runs`, `routine_runs`, `goals`, `companies`, … — the
+      spec §5.4 `tickets`/`runs` names were illustrative).
+- [x] `adapters.json` contains only network adapters (no `hermes_local`)
       and `persistSession: false` for Hermes.
 - [ ] Paperclip can create a task via UI/API (a smoke ticket) without
-      adapter errors.
+      adapter errors. **Deferred to the human one-time bootstrap:** the
+      container starts in `authenticated` mode with `bootstrap_pending`;
+      complete first-run onboarding at http://localhost:3000 (company +
+      owner account), then create the smoke ticket in Phase 6 E2E.
+
+## Implementation notes (2026-11-04, validated against real Paperclip)
+
+- Real upstream image is `ghcr.io/paperclipai/paperclip:latest` (NOT
+  `paperclip/orchestrator:latest`). The real compose contract serves
+  UI+API on container :3100 (`HOST=0.0.0.0`, `PORT=3100`, `SERVE_UI=true`);
+  host :3000 maps to it. External PostgreSQL via `DATABASE_URL`; Drizzle
+  migrations apply automatically at boot. Requires `BETTER_AUTH_SECRET`
+  and `PAPERCLIP_TOOL_ACTION_SIGNING_SECRET` (session signing secrets) —
+  both generated into `.env` (R8: never committed).
+- **No `persistSession` field exists in real Paperclip.** The real-schema
+  equivalent of ADR-05/#1160 `persistSession: false` is
+  `sessionKeyStrategy: 'run'` (one fresh session per run). Paperclip's
+  default `'issue'` strategy *does* persist sessions per issue and stays
+  forbidden until the upstream session-ID regex fix (#1160) is validated.
+- Real `hermes_gateway` adapter fields: `apiBaseUrl`, `apiKey` (stored as
+  a Paperclip secret ref, never plaintext), `sessionKeyStrategy`,
+  `timeoutSec`, `eventReconnectMs`, `dangerouslyAllowInsecureRemoteHttp`.
+  Non-loopback plain HTTP (`host.docker.internal`) requires
+  `dangerouslyAllowInsecureRemoteHttp: true` — switch to HTTPS or a
+  private overlay before production and revert the flag.
+- **Paperclip has no native goose adapter.** goose serve's HTTP ACP
+  (`/acp`, `X-Secret-Key` header — Bearer is rejected) is the validated
+  durable contract; wiring lands via Paperclip's ACP/custom-adapter path
+  in a later phase. Adapter secrets are NOT injected as container env —
+  they are stored as Paperclip secret references via UI/API.
+- Launcher binds `127.0.0.1:9000` only; container-originated triggers to
+  it are refused BY DESIGN (verified: `000` from container). Paperclip
+  talks to the adapters directly; the launcher is a host-side convenience
+  (ADR-07). If topology changes, restart with `LAUNCHER_HOST=0.0.0.0`.
+- Host firewall must allow docker0 for container→host: `sudo ufw allow in
+  on docker0` was required before cross-boundary tests passed.
+- Atomic test suite: `execution-plane/scripts/test_container_connectivity.sh`
+  (starts launcher → spawns daemons → in-container curl tests → teardown
+  via launcher endpoints only; never `pkill goose` broadly — the desktop
+  session's own `goose serve` must survive).
 
 ## Common pitfalls
 

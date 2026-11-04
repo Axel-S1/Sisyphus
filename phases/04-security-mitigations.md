@@ -14,6 +14,21 @@ Goose actions (`GOOSE_MODE=smart_approve`), enforce path/command blocking
 rules, and eliminate the SQLite WAL-on-virtiofs failure mode
 (`DeletedWalGenerationError`).
 
+> **Verified environment facts (from Phase 3 execution, 2026-11-04):**
+> - `GOOSE_MODE=smart_approve` is already present in the host `.env` —
+>   still verify it reaches each daemon's runtime env (Phase 2 wrappers).
+> - Real Paperclip image `ghcr.io/paperclipai/paperclip:latest` is running
+>   (containers `paperclip_control_plane` + `paperclip_postgres`, host
+>   :3000→container :3100, authenticated mode, `bootstrap_pending`).
+>   The smoke ticket requires the human one-time onboarding at
+>   http://localhost:3000 first — see Phase 3 notes.
+> - Paperclip has NO native goose adapter (see Phase 3 implementation
+>   notes); the goose ACP route (goose serve, `/acp`, `X-Secret-Key`,
+>   validated against goose 1.56.0) is the durable contract for the
+>   negative permission tests.
+> - Adapter secrets are stored as Paperclip secret references (UI/API),
+>   not container env vars.
+
 ## Why (risk mapping)
 
 - **R1 (Critical):** Hermes `execute_code` inherits `PYTHONPATH` → an
