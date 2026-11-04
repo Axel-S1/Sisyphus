@@ -137,6 +137,7 @@ Cognitive-context isolation is achieved through **symmetric environment-variable
 | Control Plane | Paperclip | Docker | Governance, task allocation, heartbeat, budgets, status tracking |
 | Execution Plane | Hermes | Native (HTTP server :8642) | Strategy, analytical decomposition, architecture design, critical review |
 | Execution Plane | Goose | Native (`goose serve`, HTTP/WS `:3284/acp`) | Code writing, native shell commands **(sandboxed)**, tests, refactoring |
+| Execution Plane | Host Launcher | Native Python/PowerShell service (:9000) | Process lifecycle manager for native daemons: on-demand invocation of `run.sh`/`run.ps1`, idle-timeout process termination, single-click entry point |
 | Persistence | Monorepo + bind mounts | Native / Docker | State synchronization, skill versioning |
 | Security | Ephemeral sandbox | Docker/Podman | Confinement of all AI-generated code execution |
 
@@ -164,6 +165,15 @@ These decisions are **settled** (status: *Accepted*) based on the audit. They ar
   - `run.sh`/`run.ps1` read the same file and pass the port to the engine (Goose: `GOOSE_SERVER__PORT`; Hermes: gateway port flag/config).
 - **Rationale**: without this registry, the Phase 1 "two concurrent Goose profiles" collision test cannot even be constructed over HTTP, and systemd template units would launch multiple profiles all binding the same port (second instance crash-loops).
 - **Schema caution (v2.1)**: the `HERMES_GATEWAY_URL` / `GOOSE_ACP_URL` environment-variable names in §5.2 are **illustrative** — verify against Paperclip's actual adapter configuration schema (the documented location is `control-plane/paperclip/config/adapters.json`); the URLs and secrets are the durable part of the contract, the variable names are not.
+
+### ADR-07 — Dynamic Host Launcher Micro-API & One-Button Execution
+
+- **Decision**: Introduce a lightweight, cross-platform host launcher script (`execution-plane/scripts/launcher.py` or `.ps1`) running as a low-overhead service on the native host (port 9000). The launcher receives start/stop triggers or proxies initial health checks to dynamically spawn agent profiles on demand via `run.sh` / `run.ps1`.
+- **Idle Timeout**: Automatically sends `SIGTERM` to agent daemons (`goose serve`, `hermes gateway`) after 10 minutes of network inactivity on their respective ports, releasing RAM and CPU back to the host system.
+- **Native Host Access**: Ensures all native GUI, administrator privileges (required for .NET/WPF development, Windows UAC, and system-level testing), and native toolchains remain fully accessible on the host OS.
+- **One-Button Control**: Root scripts (`start.sh` / `start.ps1` and `stop.sh` / `stop.ps1`) orchestrate launching the host launcher and running `docker compose up -d` simultaneously in a single command.
+- **Transport caution**: the launcher binds `127.0.0.1:9000` — if Paperclip (inside Docker) is the trigger client, this bind silently refuses `host.docker.internal` traffic (same failure class as Risk R9). Verify the actual trigger topology in Phase 3; bind `0.0.0.0` if container-originated triggers are required.
+- **Rationale**: Running continuous background daemons for every profile (`dev`, `reviewer`, `ceo`) permanently consumes host RAM and CPU. Dockerizing the agents breaks native .NET/WPF GUI testing. The Host Launcher solves resource hogging without compromising native execution capabilities.
 
 ### ADR-02 — Security: human approval in MVP, ephemeral sandboxing as target, immediate RCE patch
 
@@ -496,6 +506,7 @@ esac
 | R8 | `.env` leak (plaintext keys) into the repo | Critical | `.gitignore` + `GOOSE_SERVER__SECRET_KEY`/`API_SERVER_KEY` in protected env files + rotation | Ongoing |
 | R9 | `goose serve` unreachable from container (default `127.0.0.1` bind / wrong command `goose acp` used) | **High** | `GOOSE_SERVER__HOST=0.0.0.0` + per-profile port (ADR-06) + Go/No-Go curl test from *inside* the container | Phase 1 |
 | R10 | Watchdog purges a legitimately long run → duplicate execution | Medium | Liveness check (`last_activity_at`) + mark run `failed`, not `ready` | Phase 1 |
+| R11 | Host Launcher failure or port collision (:9000) | Medium | Launcher fallback to direct `run.sh` execution + healthcheck endpoint in `start.sh`/`start.ps1` | Phase 3 |
 
 ---
 

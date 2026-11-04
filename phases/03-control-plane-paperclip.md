@@ -21,6 +21,29 @@ spawn within its own namespace).
 
 ## Tasks
 
+### Task 0 — Host Launcher Micro-API & One-Button Startup (ADR-07)
+
+### Objective
+Create a lightweight, cross-platform host script to start/stop agent daemons dynamically on demand and provide single-command startup for the entire infrastructure.
+
+### Deliverables
+1. `execution-plane/scripts/launcher.py` (or PowerShell equivalent):
+   - Listens on `http://127.0.0.1:9000`.
+   - Endpoint `POST /launch?profile=<profile>&engine=<goose|hermes>`: Spawns the daemon via `run.sh` / `run.ps1` if not already running on its registered port (ADR-06).
+   - Endpoint `POST /shutdown?profile=<profile>`: Gracefully terminates the specified daemon.
+   - Idle Watchdog: Monitors port traffic; kills the subprocess after 10 minutes of zero requests to free host RAM.
+2. Root Startup Scripts:
+   - `start.sh` / `start.ps1`:
+     1. Verifies `.env` and `ports.env`.
+     2. Launches `launcher.py` in the background on the host.
+     3. Runs `docker compose up -d` to bring up Paperclip + PostgreSQL.
+     4. Prints readiness banner (`http://localhost:3000`).
+   - `stop.sh` / `stop.ps1`:
+     1. Runs `docker compose down`.
+     2. Kills the host launcher and any active `goose` / `hermes` processes cleanly.
+
+> ⚠️ Bind check (Risk R9 class): if the launcher must be triggered from inside the Paperclip container, `127.0.0.1:9000` silently refuses `host.docker.internal` traffic — bind `0.0.0.0` and require a secret header in that case.
+
 ### 1. Write `docker-compose.yml`
 
 ```yaml

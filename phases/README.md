@@ -16,7 +16,7 @@ v2.1). The MVP is the spec's **Phase 1**; it is decomposed here into
 |---|-----------|-------|------------|
 | 1 | [`01-monorepo-scaffolding.md`](01-monorepo-scaffolding.md) | Repo tree, `.gitignore`, `.env.example`, `ports.env.example` (ADR-06) | — |
 | 2 | [`02-execution-plane-daemons.md`](02-execution-plane-daemons.md) | `run.sh`/`run.ps1`, Hermes gateway + `goose serve` daemons, systemd units, profiles | 01 |
-| 3 | [`03-control-plane-paperclip.md`](03-control-plane-paperclip.md) | `docker-compose.yml`, PostgreSQL/Drizzle, `adapters.json` (`persistSession: false`), ACP client for Goose | 01, 02 |
+| 3 | [`03-control-plane-paperclip.md`](03-control-plane-paperclip.md) | `docker-compose.yml`, PostgreSQL/Drizzle, `adapters.json` (`persistSession: false`), ACP client for Goose, Host Launcher Micro-API (ADR-07), `start.sh`/`start.ps1` | 01, 02 |
 | 4 | [`04-security-mitigations.md`](04-security-mitigations.md) | `PYTHONPATH` patch (CVE-2026-9368), `GOOSE_MODE=smart_approve`, `tool_permissions.json`, SQLite `journal_mode: delete` | 02 |
 | 5 | [`05-reliability-watchdog.md`](05-reliability-watchdog.md) | Orphaned-lock watchdog (#3819, liveness semantics), exponential backoff (#6596) | 03 |
 | 6 | [`06-e2e-validation.md`](06-e2e-validation.md) | Go/No-Go checklist execution, full E2E CEO → Dev → pytest → Paperclip | all |
