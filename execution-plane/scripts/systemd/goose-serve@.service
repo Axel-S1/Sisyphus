@@ -1,0 +1,30 @@
+# goose-serve@.service — Goose ACP-over-HTTP server, one instance per profile.
+# Installed to /etc/systemd/system/ by install-systemd.sh (which substitutes
+# @@REPO@@ / @@USER@@). Instances: systemctl start goose-serve@dev
+# Instance name (%i) is the *profile*, not the port — the ADR-06 registry in
+# execution-plane/scripts/ports.env maps profile → port (run.sh resolves it).
+#
+# ⚠ ExecStart delegates to run.sh instead of calling `goose serve` directly:
+#   goose 1.56.0 does NOT honour GOOSE_SERVER__HOST/GOOSE_SERVER__PORT env vars
+#   (validated against the installed build); run.sh passes validated CLI flags
+#   (--host/--port), injects GOOSE_PATH_ROOT (ADR-03) and hard-fails on missing
+#   env. Signals propagate because run.sh `exec`s the daemon.
+[Unit]
+Description=Goose ACP-over-HTTP server (profile %i)
+After=network.target
+
+[Service]
+Type=simple
+User=@@USER@@
+Group=@@USER@@
+WorkingDirectory=@@REPO@@
+ExecStart=@@REPO@@/execution-plane/scripts/run.sh %i goose
+# MVP security mode — smart_approve only, never auto (Risk R7).
+Environment=GOOSE_MODE=smart_approve
+# Mandatory wide bind: localhost silently refuses host.docker.internal traffic.
+Environment=GOOSE_SERVER__HOST=0.0.0.0
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

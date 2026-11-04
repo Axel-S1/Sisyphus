@@ -1,0 +1,3 @@
+# Goose profile config — reviewer (seeded into $GOOSE_PATH_ROOT/config/config.yaml by run.sh)
+# MVP: smart_approve only — never auto (Risk R7). tool_permissions.json rules arrive in Phase 4.
+GOOSE_MODE: smart_approve
