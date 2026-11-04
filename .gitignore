@@ -10,6 +10,8 @@ storage/goose_data/**
 !storage/goose_data/**/.gitkeep
 storage/paperclip_data/*
 !storage/paperclip_data/.gitkeep
+storage/paperclip_pgdata/
+storage/launcher*.log
 execution-plane/workspace/*
 !execution-plane/workspace/.gitkeep
 

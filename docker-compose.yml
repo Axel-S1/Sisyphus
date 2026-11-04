@@ -1,36 +1,54 @@
 # docker-compose.yml — Sisyphus Control Plane (Phase 3)
 #
-# Control Plane: Paperclip orchestrator + PostgreSQL.
-# The Execution Plane (goose serve / hermes serve) runs natively on the host,
-# spawned on demand by the Host Launcher (ADR-07) — see execution-plane/scripts/launcher.py.
+# Control Plane: Paperclip (ghcr.io/paperclipai/paperclip) + PostgreSQL.
+# The Execution Plane (goose serve / hermes gateway) runs natively on the host,
+# spawned on demand by the Host Launcher (ADR-07) — execution-plane/scripts/launcher.py.
 #
-# Requires the docker compose plugin (`pacman -S docker-compose`).
+# Real Paperclip image contract (docs.paperclip.ing/reference/deploy/docker/):
+#   - serves UI+API on container port 3100 (HOST=0.0.0.0, PORT=3100, SERVE_UI=true)
+#   - external PostgreSQL via DATABASE_URL; Drizzle schema auto-migrates at boot
+#   - adapters are configured via the Paperclip UI/API as secret references —
+#     see control-plane/paperclip/config/adapters.json for the Sisyphus adapter
+#     contract (network-only, no hermes_local inside the container — ADR-01).
+#
 # Linux note: containers reach host daemons via host.docker.internal,
-# mapped with extra_hosts: host-gateway.
+# mapped with extra_hosts: host-gateway (R9: daemons must bind 0.0.0.0).
 services:
   paperclip:
-    image: paperclip/orchestrator:latest
+    image: ghcr.io/paperclipai/paperclip:latest
     container_name: paperclip_control_plane
     restart: unless-stopped
+    # Ceiling on processes (per upstream compose): tini is PID 1 and reaps
+    # orphaned agent descendants; pids_limit is the visible-failure backstop.
+    pids_limit: 2048
+    # Includes the shared 30s adapter-settlement window and final cleanup.
+    stop_grace_period: 90s
     ports:
-      - "3000:3000"
+      - "3000:3100" # spec §5.2: Paperclip UI/API on host :3000; real image serves :3100
     environment:
-      - NODE_ENV=production
-      - DATABASE_URL=postgres://paperclip:${POSTGRES_PASSWORD}@postgres:5432/paperclip
-      - STORAGE_PATH=/app/storage
-      # Execution Plane targets — NEVER local spawning (ADR-01).
-      # Env var names are illustrative (ADR-06): the authoritative adapter
-      # config is control-plane/paperclip/config/adapters.json.
-      - HERMES_GATEWAY_URL=http://host.docker.internal:8642
-      - GOOSE_ACP_URL=http://host.docker.internal:3284/acp
-      - API_SERVER_KEY=${API_SERVER_KEY}
-      - GOOSE_SERVER__SECRET_KEY=${GOOSE_SERVER__SECRET_KEY}
+      HOST: "0.0.0.0"
+      PORT: "3100"
+      SERVE_UI: "true"
+      NODE_ENV: production
+      # ── Persistence: external PostgreSQL + Drizzle (spec §2.2) ──
+      DATABASE_URL: postgres://paperclip:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/paperclip
+      # ── Paperclip runtime ──
+      PAPERCLIP_HOME: /paperclip
+      PAPERCLIP_DEPLOYMENT_MODE: authenticated
+      PAPERCLIP_DEPLOYMENT_EXPOSURE: private
+      PAPERCLIP_PUBLIC_URL: ${PAPERCLIP_PUBLIC_URL:-http://localhost:3000}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
+      # ── LLM provider keys (at least one needed for agent runs; not required
+      #    for Phase 3 smoke-ticket validation) ──
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # NOTE: adapter secrets (API_SERVER_KEY for Hermes, GOOSE_SERVER__SECRET_KEY
+      # for goose serve) are intentionally NOT injected here. They are stored as
+      # Paperclip secret references when adapters are configured via UI/API.
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ./storage/paperclip_data:/app/storage
-      - ./control-plane/paperclip/config:/app/config:ro
-      - ./execution-plane/workspace:/app/workspace
+      - ./storage/paperclip_data:/paperclip
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,9 +58,9 @@ services:
     container_name: paperclip_postgres
     restart: unless-stopped
     environment:
-      - POSTGRES_USER=paperclip
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
-      - POSTGRES_DB=paperclip
+      POSTGRES_USER: paperclip
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: paperclip
     ports:
       - "127.0.0.1:5432:5432"
     volumes:

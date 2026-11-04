@@ -1,9 +1,15 @@
 {
-  "$comment": "Paperclip control-plane adapters (Phase 3). Exclusively network adapters — hermes_local is FORBIDDEN inside the container (spec ADR-01). URLs target host.docker.internal; on Linux docker-compose maps it via extra_hosts. Secret values are injected from .env by docker compose / start.sh — never hardcode secrets here (R8).",
+  "$comment": "Paperclip control-plane adapter CONTRACT (Phase 3). Exclusively network adapters — hermes_local is FORBIDDEN inside the container (spec ADR-01). URLs target host.docker.internal; on Linux docker-compose maps it via extra_hosts. NOTE (ADR-06 schema caution): the real Paperclip (ghcr.io/paperclipai/paperclip) does not read this file directly — agents are configured per-agent via the Paperclip UI/API as {adapterType, adapterConfig} with secrets stored as Paperclip secret references. This file documents the Sisyphus-side durable contract: URLs, auth headers, and the ADR-05 persistSession:false mapping.",
+  "realSchemaMapping": {
+    "$comment": "Verified against docs.paperclip.ing/reference/adapters/ (master, 2026-11). Paperclip has NO persistSession field; the real equivalent of ADR-05/#1160 persistSession:false is sessionKeyStrategy:'run' (a new session per run — fully isolated runs, no shared memory). sessionKeyStrategy:'issue' (Paperclip default) WOULD persist sessions per issue and is therefore forbidden until the upstream session-ID regex fix (Paperclip #1160) is validated.",
+    "persistSession_false": "sessionKeyStrategy: 'run'",
+    "hermesGatewayConfigFields": ["apiBaseUrl", "apiKey (secret_ref)", "sessionKeyStrategy", "timeoutSec", "eventReconnectMs", "dangerouslyAllowInsecureRemoteHttp", "paperclipApiUrl", "headers", "instructions"],
+    "gooseAdapters": "Paperclip has no native goose adapter; goose serve speaks ACP (validated against installed goose 1.56.0). Wire via Paperclip's ACP engine / custom adapter once agent wiring lands (Phase 4+). The X-Secret-Key header and URLs below are the validated durable contract."
+  },
   "adapters": [
     {
       "id": "hermes_ceo",
-      "type": "hermes_gateway",
+      "adapterType": "hermes_gateway",
       "transport": "http",
       "url": "http://host.docker.internal:8642",
       "auth": {
@@ -11,7 +17,17 @@
         "secretEnv": "API_SERVER_KEY"
       },
       "persistSession": false,
-      "$comment_persistSession": "ADR-05 / Paperclip #1160: false until the session-ID regex fix is validated upstream."
+      "realSchemaEquivalent": {
+        "adapterType": "hermes_gateway",
+        "adapterConfig": {
+          "apiBaseUrl": "http://host.docker.internal:8642",
+          "apiKey": { "type": "secret_ref", "secretId": "hermes-api-key", "version": "latest" },
+          "sessionKeyStrategy": "run",
+          "dangerouslyAllowInsecureRemoteHttp": true,
+          "$comment": "dangerouslyAllowInsecureRemoteHttp is required because host.docker.internal is non-loopback HTTP; production must switch to HTTPS or a private overlay and set this back to false."
+        }
+      },
+      "$comment_persistSession": "ADR-05 / Paperclip #1160: false until the session-ID regex fix is validated upstream. Real-schema equivalent: sessionKeyStrategy:'run'."
     },
     {
       "id": "goose_dev",
@@ -23,7 +39,7 @@
         "headerName": "X-Secret-Key",
         "secretEnv": "GOOSE_SERVER__SECRET_KEY"
       },
-      "$comment": "Auth header validated against installed goose 1.56.0 (Bearer is rejected with 401). Spawn on demand via the Host Launcher (ADR-07): POST http://host.docker.internal:9000/launch?profile=dev&engine=goose"
+      "$comment": "Auth header validated against installed goose 1.56.0 (Bearer is rejected with 401). ACP initialize handshake from inside the container validated (Phase 3 Go/No-Go). Spawn on demand via the Host Launcher (ADR-07): POST http://host.docker.internal:9000/launch?profile=dev&engine=goose"
     },
     {
       "id": "goose_reviewer",
@@ -35,7 +51,7 @@
         "headerName": "X-Secret-Key",
         "secretEnv": "GOOSE_SERVER__SECRET_KEY"
       },
-      "$comment": "Same launcher trigger: POST /launch?profile=reviewer&engine=goose"
+      "$comment": "Same launcher trigger: POST /launch?profile=reviewer&engine=goose. ACP handshake validated from inside the container."
     }
   ],
   "launcher": {
@@ -45,6 +61,6 @@
       "headerName": "X-Launcher-Secret",
       "secretEnv": "LAUNCHER_SECRET"
     },
-    "$comment": "ADR-07 — daemon lifecycle management. The launcher binds 127.0.0.1 by default; if container-originated triggers are needed, start it with LAUNCHER_HOST=0.0.0.0 (secret then mandatory)."
+    "$comment": "ADR-07 — daemon lifecycle management. The launcher binds 127.0.0.1 by default; container-originated triggers to :9000 are refused BY DESIGN (verified Phase 3): Paperclip talks to the adapters directly, not to the launcher. If that topology changes, start it with LAUNCHER_HOST=0.0.0.0 (secret then mandatory)."
   }
 }
