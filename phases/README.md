@@ -4,7 +4,7 @@ This directory contains the **execution plan to reach the MVP** of the
 "Local-First Multi-Agent System" (Paperclip · Hermes · Goose).
 
 Source of truth: the architecture spec in the repository root
-(`Multi-Agents Architecture (Paperclip, Goose, Hermes) v2 — Post-Audit Review.md`,
+(`docs/spec/Multi-Agents Architecture (Paperclip, Goose, Hermes) v2 — Post-Audit Review.md`,
 v2.1). The MVP is the spec's **Phase 1**; it is decomposed here into
 **6 sequential sub-phases**, each sized for one autonomous agent run.
 
