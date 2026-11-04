@@ -48,16 +48,25 @@ Progress tracker for the 6-phase MVP plan ([`phases/README.md`](phases/README.md
 
 ## What is next
 
-**Phase 3 — Control Plane (Paperclip)** (`phases/03-control-plane-paperclip.md`):
-`docker-compose.yml` with PostgreSQL/Drizzle, Paperclip container, real
-`adapters.json` pointing at `http://host.docker.internal:<ports>`, and the
-Goose ACP client. Recorded endpoints for that phase:
+**Phase 3 — Control Plane (Paperclip)** — in progress:
+- ✅ **Task 0 (ADR-07): Host Launcher + one-button scripts** — `launcher.py`
+  (stdlib HTTP on :9000, `/launch`, `/shutdown`, `/touch`, `/status`,
+  10-min idle watchdog), `start.sh`/`stop.sh`. End-to-end test passed:
+  `/launch?profile=dev&engine=goose` spawned the daemon via `run.sh`, a
+  live JSON-RPC handshake succeeded on :3284, `/shutdown` closed the port.
+- ⬜ `adapters.json` (hermes_gateway :8642, goose ACP :3284/acp,
+  `persistSession: false`)
+- ⬜ Connectivity tests from inside the Paperclip container
+- ⬜ Drizzle/PostgreSQL persistence check
+
+**Phase 3 endpoints recorded for `adapters.json`:**
 
 | Adapter target | URL | Auth header |
 |---|---|---|
 | Goose dev | `http://host.docker.internal:3284/acp` | `X-Secret-Key` |
 | Goose reviewer | `http://host.docker.internal:3285/acp` | `X-Secret-Key` |
-| Hermes ceo | `http://host.docker.internal:8642` | `API_SERVER_KEY` (verify header name) |
+| Hermes ceo | `http://host.docker.internal:8642` | verify against installed build |
+| Host Launcher | `http://host.docker.internal:9000` (if container-triggered) | `X-Launcher-Secret` |
 
 ## Current problems / blockers
 
