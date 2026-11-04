@@ -1,1 +1,50 @@
-{}
+{
+  "$comment": "Paperclip control-plane adapters (Phase 3). Exclusively network adapters — hermes_local is FORBIDDEN inside the container (spec ADR-01). URLs target host.docker.internal; on Linux docker-compose maps it via extra_hosts. Secret values are injected from .env by docker compose / start.sh — never hardcode secrets here (R8).",
+  "adapters": [
+    {
+      "id": "hermes_ceo",
+      "type": "hermes_gateway",
+      "transport": "http",
+      "url": "http://host.docker.internal:8642",
+      "auth": {
+        "mode": "secret_header",
+        "secretEnv": "API_SERVER_KEY"
+      },
+      "persistSession": false,
+      "$comment_persistSession": "ADR-05 / Paperclip #1160: false until the session-ID regex fix is validated upstream."
+    },
+    {
+      "id": "goose_dev",
+      "type": "acp_client",
+      "transport": "http_ws",
+      "url": "http://host.docker.internal:3284/acp",
+      "auth": {
+        "mode": "secret_header",
+        "headerName": "X-Secret-Key",
+        "secretEnv": "GOOSE_SERVER__SECRET_KEY"
+      },
+      "$comment": "Auth header validated against installed goose 1.56.0 (Bearer is rejected with 401). Spawn on demand via the Host Launcher (ADR-07): POST http://host.docker.internal:9000/launch?profile=dev&engine=goose"
+    },
+    {
+      "id": "goose_reviewer",
+      "type": "acp_client",
+      "transport": "http_ws",
+      "url": "http://host.docker.internal:3285/acp",
+      "auth": {
+        "mode": "secret_header",
+        "headerName": "X-Secret-Key",
+        "secretEnv": "GOOSE_SERVER__SECRET_KEY"
+      },
+      "$comment": "Same launcher trigger: POST /launch?profile=reviewer&engine=goose"
+    }
+  ],
+  "launcher": {
+    "url": "http://host.docker.internal:9000",
+    "auth": {
+      "mode": "secret_header",
+      "headerName": "X-Launcher-Secret",
+      "secretEnv": "LAUNCHER_SECRET"
+    },
+    "$comment": "ADR-07 — daemon lifecycle management. The launcher binds 127.0.0.1 by default; if container-originated triggers are needed, start it with LAUNCHER_HOST=0.0.0.0 (secret then mandatory)."
+  }
+}
