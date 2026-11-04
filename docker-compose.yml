@@ -1,4 +1,54 @@
-# Placeholder — the real Docker Compose stack (PostgreSQL, Drizzle migrations,
-# Paperclip control plane) is defined in Phase 3.
-version: "3.9"
-services: {}
+# docker-compose.yml — Sisyphus Control Plane (Phase 3)
+#
+# Control Plane: Paperclip orchestrator + PostgreSQL.
+# The Execution Plane (goose serve / hermes serve) runs natively on the host,
+# spawned on demand by the Host Launcher (ADR-07) — see execution-plane/scripts/launcher.py.
+#
+# Requires the docker compose plugin (`pacman -S docker-compose`).
+# Linux note: containers reach host daemons via host.docker.internal,
+# mapped with extra_hosts: host-gateway.
+services:
+  paperclip:
+    image: paperclip/orchestrator:latest
+    container_name: paperclip_control_plane
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgres://paperclip:${POSTGRES_PASSWORD}@postgres:5432/paperclip
+      - STORAGE_PATH=/app/storage
+      # Execution Plane targets — NEVER local spawning (ADR-01).
+      # Env var names are illustrative (ADR-06): the authoritative adapter
+      # config is control-plane/paperclip/config/adapters.json.
+      - HERMES_GATEWAY_URL=http://host.docker.internal:8642
+      - GOOSE_ACP_URL=http://host.docker.internal:3284/acp
+      - API_SERVER_KEY=${API_SERVER_KEY}
+      - GOOSE_SERVER__SECRET_KEY=${GOOSE_SERVER__SECRET_KEY}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./storage/paperclip_data:/app/storage
+      - ./control-plane/paperclip/config:/app/config:ro
+      - ./execution-plane/workspace:/app/workspace
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16
+    container_name: paperclip_postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=paperclip
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      - POSTGRES_DB=paperclip
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ./storage/paperclip_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paperclip -d paperclip"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
