@@ -61,7 +61,12 @@ case "$ENGINE" in
     command -v hermes >/dev/null 2>&1 || {
       echo "FATAL: 'hermes' binary not found on PATH (Execution Plane requires it)" >&2; exit 127; }
     export API_SERVER_KEY="${API_SERVER_KEY:?API_SERVER_KEY required (Hermes gateway auth)}"
-    exec hermes gateway run --port "$(port_from_registry "$PROFILE" HERMES_PORT)" ;;
+    # Adapted for installed Hermes v0.22.7 (spec §2.3 assumed `hermes gateway
+    # run --port`, which does not exist — `hermes gateway` is a messaging
+    # gateway for Telegram/Discord). The HTTP/JSON-RPC daemon is `hermes
+    # serve --port/--host`. Durable contract intact: HTTP endpoint, one port
+    # per profile (ADR-06). Non-loopback bind requires Hermes auth provider.
+    exec hermes serve --port "$(port_from_registry "$PROFILE" HERMES_PORT)" --host 0.0.0.0 ;;
   goose)
     command -v goose >/dev/null 2>&1 || {
       echo "FATAL: 'goose' binary not found on PATH (Execution Plane requires it)" >&2; exit 127; }

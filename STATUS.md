@@ -61,10 +61,19 @@ Goose ACP client. Recorded endpoints for that phase:
 
 ## Current problems / blockers
 
-1. **Hermes is not installed** on this host (`hermes: command not found`).
-   `run.sh ceo hermes` correctly hard-fails with exit 127, but the CEO chain
-   is dead until the Hermes CLI is installed and `hermes gateway run`
-   semantics are validated against the actual build.
+1. **Hermes spec adaptation (RESOLVED 2026-11-04, needs spec text update)** —
+   Hermes v0.22.7 is now installed. The spec's assumed command
+   `hermes gateway run --port 8642` is wrong for this build: `hermes
+   gateway` is a *messaging* gateway (Telegram/Discord) with no `--port`.
+   The actual HTTP daemon is **`hermes serve --port 8642 --host <bind>`**
+   (JSON-RPC/WebSocket, smoke-tested: binds and reports
+   `HERMES_BACKEND_READY port=8642`). Auth differs from the spec too: a
+   non-loopback bind requires Hermes's own auth provider (password/OAuth),
+   not a plain `API_SERVER_KEY` env var — `--insecure` is a no-op as of
+   June 2026 hardening. `run.sh` must be updated to exec `hermes serve` and
+   the durable contract (HTTP endpoint, one port per profile) stays intact.
+   `hermes acp` exists but is stdio-only (same Risk R9 class as `goose acp`)
+   — never use it for the network daemon.
 2. **systemd units not installed** — installer needs sudo (no passwordless
    sudo available to the agent). Run manually:
    ```bash
