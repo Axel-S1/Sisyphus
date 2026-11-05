@@ -1,99 +1,94 @@
-# Project Status — Sisyphus (updated 2026-11-04)
+# Project Status — Sisyphus (updated 2026-11-05)
 
-Progress tracker for the 6-phase MVP plan ([`phases/README.md`](phases/README.md)).
+Progress tracker for the 6-phase MVP plan — see
+[`docs/phases/README.md`](docs/phases/README.md) and the architecture spec
+[`docs/spec/architecture-spec.md`](docs/spec/architecture-spec.md) (v2.2,
+implementation-verified).
 
 | # | Phase | Status |
 |---|-------|--------|
 | 1 | Monorepo scaffolding | ✅ Done (`7fa1fda`, `52f138e`) |
-| 2 | Execution plane daemons | ✅ Done (`d3c0c0a`) |
-| 3 | Control plane (Paperclip) | ⬜ Next |
-| 4 | Security mitigations | ⬜ Pending |
+| 2 | Execution plane daemons | ✅ Done (`d3c0c0a`, `1cc513a`) |
+| 3 | Control plane (Paperclip) | ✅ Done (`c3224d2`, `67aba3f`, `de6a38a`) |
+| 4 | Security mitigations | ⬜ **Next** |
 | 5 | Reliability watchdog | ⬜ Pending |
-| 6 | E2E validation | ⬜ Pending |
+| 6 | E2E validation & Go/No-Go | ⬜ Pending |
+
+> **Documentation set (2026-11-05):** the whole doc tree was restructured —
+> the spec is now `docs/spec/architecture-spec.md` (v2.2 with every
+> implementation-verified correction), phase docs live in `docs/phases/`
+> (phases 1–3 as as-built records with verification evidence; 4–6 as plans),
+> and this tracker replaced the stale narrative.
 
 ## What is done
 
 ### Phase 1 — Monorepo scaffolding
-- Full directory tree (control-plane, execution-plane, storage, phases).
-- `.gitignore` with the six spec-mandated lines (R8: `.env`, `ports.env`,
-  `storage/goose_data/**`, Hermes sessions/logs, workspace) + hygiene rules
-  and `.gitkeep` negations so placeholder dirs stay tracked.
-- `.env.example` (distinct `API_SERVER_KEY` / `GOOSE_SERVER__SECRET_KEY`) and
-  `execution-plane/scripts/ports.env.example` (ADR-06 port registry).
-- Placeholders: `docker-compose.yml`, `adapters.json`, `tool_permissions.json`.
+- Full directory tree (control-plane, execution-plane, storage, docs).
+- `.gitignore` with the six spec-mandated lines (R8) + hygiene rules +
+  `.gitkeep` negations + `storage/paperclip_pgdata/` + launcher logs.
+- `.env.example` (distinct `API_SERVER_KEY` / `GOOSE_SERVER__SECRET_KEY` +
+  Paperclip bootstrap secrets) and `ports.env.example` (ADR-06 registry).
 
 ### Phase 2 — Execution plane daemons
-- `execution-plane/scripts/run.sh` (POSIX bootstrap): loads `.env` +
-  `ports.env`, injects `HERMES_HOME` + `GOOSE_PATH_ROOT` per profile (ADR-03,
-  hard-fail if missing), resolves the profile port from the ADR-06 registry,
-  then execs `goose serve` (never `goose acp` — Risk R9) or `hermes gateway run`.
-- `run.ps1` — PowerShell equivalent (syntax check pending, no pwsh installed).
-- systemd template units (`goose-serve@.service`, `hermes-gateway@.service`,
-  `Restart=on-failure`, secrets from `.env`, never inlined) plus
-  `install-systemd.sh` installer.
-- Profile configs: `dev`/`reviewer` Goose (`GOOSE_MODE: smart_approve`), `ceo`
-  Hermes (`SOUL.md`, `AGENTS.md` placeholders).
+- `run.sh` / `run.ps1`: load `.env` + `ports.env`, inject `HERMES_HOME` +
+  `GOOSE_PATH_ROOT` symmetrically (ADR-03, hard-fail), resolve profile port
+  from the registry, exec the correct server command.
+- Profile configs: `dev`/`reviewer` Goose (`GOOSE_MODE: smart_approve`),
+  `ceo` Hermes (`SOUL.md`, `AGENTS.md`).
+- systemd templates were **removed** — deprecated by ADR-07 (Host Launcher).
 
-### Verified against the installed build (goose 1.56.0)
-- `goose serve` serves HTTP/WS ACP on `/acp`; **auth header is
-  `X-Secret-Key`** (not `Authorization: Bearer` as the spec sketch suggested).
-- goose **ignores** `GOOSE_SERVER__HOST`/`GOOSE_SERVER__PORT` env vars — ports
-  are passed as CLI flags (`--host 0.0.0.0 --port <port>`).
-- `GOOSE_PATH_ROOT` fully redirects config/data/state (incl. `sessions.db`),
-  `GOOSE_MODE=smart_approve` is a valid mode.
-- Concurrency collision test passed: `dev` (:3284) and `reviewer` (:3285) ran
-  simultaneously with zero cross-writes; `~/.config/goose/` and
-  `~/.local/share/goose/` stayed untouched.
-- Handshake: HTTP 200 JSON-RPC 2.0 `initialize` with secret; **401** without.
+### Phase 3 — Control plane (Paperclip)
+- **Host Launcher Micro-API (ADR-07)**: `launcher.py` (:9000, `/launch`,
+  `/shutdown`, `/touch`, `/status`, 10-min idle watchdog) +
+  `start.sh`/`stop.sh` one-button scripts.
+- **Real Paperclip in Docker**: `ghcr.io/paperclipai/paperclip:latest`
+  (UI/API host :3000 → container :3100) + external PostgreSQL 16 with
+  `DATABASE_URL`; Drizzle migrations applied at boot; health checks green.
+- **adapters.json**: network-only adapter contract with real-schema mapping
+  (`sessionKeyStrategy: 'run'` as the durable equivalent of the historical
+  `persistSession:false`; hermes_local forbidden in-container per ADR-01).
+- **Atomic connectivity suite**: `test_container_connectivity.sh`.
+- In-container tests **all passed** (after `sudo ufw allow in on docker0`):
+  goose dev + reviewer ACP handshakes with `X-Secret-Key`, 401 negative test,
+  launcher loopback-by-design verification, clean teardown via launcher
+  endpoints.
 
-## What is next
+## Verified facts (validated against installed builds)
 
-**Phase 3 — Control Plane (Paperclip)** — in progress:
-- ✅ **Task 0 (ADR-07): Host Launcher + one-button scripts** — `launcher.py`
-  (stdlib HTTP on :9000, `/launch`, `/shutdown`, `/touch`, `/status`,
-  10-min idle watchdog), `start.sh`/`stop.sh`. End-to-end test passed:
-  `/launch?profile=dev&engine=goose` spawned the daemon via `run.sh`, a
-  live JSON-RPC handshake succeeded on :3284, `/shutdown` closed the port.
-- ⬜ `adapters.json` (hermes_gateway :8642, goose ACP :3284/acp,
-  `persistSession: false`)
-- ⬜ Connectivity tests from inside the Paperclip container
-- ⬜ Drizzle/PostgreSQL persistence check
+- **Goose 1.56.0**: `goose serve --host 0.0.0.0 --port <p>` (env vars for
+  host/port are ignored — CLI flags required); auth header **`X-Secret-Key`**
+  (`Authorization: Bearer` → 401); ACP `initialize` needs an integer
+  `protocolVersion`; `GOOSE_PATH_ROOT` fully redirects config/data/state;
+  `GOOSE_MODE=smart_approve` valid; concurrent profiles had **zero
+  cross-writes**.
+- **Hermes v0.22.7**: the HTTP daemon is **`hermes serve --port <p> --host
+  0.0.0.0`** — `hermes gateway` is a messaging gateway (no `--port`), and
+  `hermes acp` is stdio-only. Non-loopback binds require Hermes's own auth
+  provider (not a plain env key; `--insecure` is a no-op).
+- **Paperclip (ghcr.io/paperclipai/paperclip)**: serves :3100; external
+  Postgres via `DATABASE_URL`; requires `BETTER_AUTH_SECRET`; migrations at
+  boot; **no `persistSession` field** — the durable equivalent is
+  `sessionKeyStrategy: 'run'`; no native Goose adapter (ACP route via goose
+  serve is the contract); adapter secrets stored as Paperclip secret refs,
+  not container env.
+- **Networking**: host firewall must `allow in on docker0` for container→host
+  traffic; launcher stays loopback-only by design.
 
-**Phase 3 endpoints recorded for `adapters.json`:**
+## Blockers / open items
 
-| Adapter target | URL | Auth header |
-|---|---|---|
-| Goose dev | `http://host.docker.internal:3284/acp` | `X-Secret-Key` |
-| Goose reviewer | `http://host.docker.internal:3285/acp` | `X-Secret-Key` |
-| Hermes ceo | `http://host.docker.internal:8642` | verify against installed build |
-| Host Launcher | `http://host.docker.internal:9000` (if container-triggered) | `X-Launcher-Secret` |
+1. **Human step (pending):** Paperclip first-run onboarding at
+   <http://localhost:3000> (`bootstrap_pending`). Unblocks the smoke-ticket
+   test (Phase 6) and the full pipeline approval test (Phase 4).
+2. **`run.ps1` unverified** — no `pwsh` on the reference host; mirrors tested
+   `run.sh` logic.
+3. **LLM keys** — `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` needed in `.env`
+   before agent turns can run (Phase 6 E2E).
+4. **`tool_permissions.json`** is a placeholder `{}` — Phase 4 fills it
+   (schema validated against the installed goose build first).
 
-## Current problems / blockers
+## Next up — Phase 4 (security baseline)
 
-1. **Hermes spec adaptation (RESOLVED 2026-11-04, needs spec text update)** —
-   Hermes v0.22.7 is now installed. The spec's assumed command
-   `hermes gateway run --port 8642` is wrong for this build: `hermes
-   gateway` is a *messaging* gateway (Telegram/Discord) with no `--port`.
-   The actual HTTP daemon is **`hermes serve --port 8642 --host <bind>`**
-   (JSON-RPC/WebSocket, smoke-tested: binds and reports
-   `HERMES_BACKEND_READY port=8642`). Auth differs from the spec too: a
-   non-loopback bind requires Hermes's own auth provider (password/OAuth),
-   not a plain `API_SERVER_KEY` env var — `--insecure` is a no-op as of
-   June 2026 hardening. `run.sh` must be updated to exec `hermes serve` and
-   the durable contract (HTTP endpoint, one port per profile) stays intact.
-   `hermes acp` exists but is stdio-only (same Risk R9 class as `goose acp`)
-   — never use it for the network daemon.
-2. ~~**systemd units not installed** — installer needs sudo (no passwordless
-   sudo available to the agent)~~ — **RESOLVED / OBSOLETE (2026-11-04)**:
-   systemd daemons are officially deprecated by ADR-07 (Host Launcher
-   Micro-API). The unit templates and `install-systemd.sh` have been removed
-   from the repo; daemons are spawned on demand by the launcher via
-   `run.sh`/`run.ps1` and torn down after a 10-minute idle timeout.
-3. **`run.ps1` unverified** — no `pwsh` on this host; logic mirrors the tested
-   `run.sh` but has never executed.
-4. **Paperclip not yet built/obtained** — nothing exists in
-   `control-plane/paperclip/` besides config placeholders; Phase 3 needs the
-   actual Paperclip codebase and its `adapters.json` schema to validate the
-   adapter URL variable names (spec flags them as illustrative).
-5. **LLM keys not set** — `.env` has empty `ANTHROPIC_API_KEY` /
-   `OPENAI_API_KEY`; agent turns requiring a provider will fail until set.
+PYTHONPATH env allowlist patch for Hermes `execute_code` (CVE-2026-9368),
+verify `smart_approve` reaches every daemon runtime, write the tool
+permission policy, enforce SQLite `journal_mode: delete`, run the negative
+permission tests. See `docs/phases/04-security-mitigations.md`.
