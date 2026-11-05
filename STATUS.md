@@ -11,7 +11,7 @@ implementation-verified).
 | 2 | Execution plane daemons | ✅ Done (`d3c0c0a`, `1cc513a`) |
 | 3 | Control plane (Paperclip) | ✅ Done (`c3224d2`, `67aba3f`, `de6a38a`) |
 | 4 | Security mitigations | ✅ Done (env scrub verified, smart_approve confirmed, SQLite journal-mode enforced) |
-| 5 | Reliability watchdog | ⬜ Pending |
+| 5 | Reliability watchdog | ✅ Done (`b80f243`) |
 | 6 | E2E validation & Go/No-Go | ⬜ Pending |
 
 > **Documentation set (2026-11-05):** the whole doc tree was restructured —
@@ -113,8 +113,27 @@ implementation-verified).
   test, smart_approve env/config agreement, policy JSON validity). All
   checks pass (exit 0).
 
-## Next up — Phase 5 (reliability watchdog)
+## Phase 5 — Reliability (as-built, 2026-11-05)
 
-Watchdog heartbeat/detection (#3819) and exponential backoff (#6596) against
-the live Paperclip schema (`issues`/`heartbeat_runs`/`routine_runs` tables
-verified present in the paperclip_postgres instance).
+- **T1 (#3819 Orphaned-lock watchdog)**: `watchdog-locks.sh` created and
+  tested against the live Paperclip Drizzle schema (`issues`/`heartbeat_runs`).
+  - Liveness semantics: activity-based (GREATEST of updated_at,
+    last_useful_action_at, last_output_at, started_at), never start-time (R10).
+  - Two-phase: mark run failed (watchdog error string) THEN release issue
+    lock (filtered by `watchdog:%` error to avoid releasing other failures).
+  - `--dry-run` mode for acceptance testing.
+  - Verified: fresh-but-old run survives; stale run purged exactly once;
+    long-active never purged.
+- **T2 (#6596 Exponential backoff)**: `backoff_proxy.py` created and tested.
+  - Exponential backoff: base 2s, factor 2, jitter, max 6 retries
+    (connect-level failures only).
+  - Circuit-breaker: concurrent requests during outage fast-fail 503 —
+    no thundering-herd.
+  - HTTP-level errors relayed as-is (never retried — idempotency safety).
+  - Offline suspension with background probe recovery + storm metrics.
+  - Verified: backoff succeeds after transient failures; circuit-breaker
+    prevents retry storm; HTTP errors relayed correctly.
+- **Scheduler (ADR-07)**: launcher periodic hook (`--hook-script`) runs the
+  watchdog every 10 minutes. No systemd/cron required.
+
+## Next up — Phase 6 (E2E validation)
