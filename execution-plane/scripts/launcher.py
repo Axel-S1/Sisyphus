@@ -49,6 +49,7 @@ PORTS_ENV = os.path.join(REPO_ROOT, "execution-plane", "scripts", "ports.env")
 
 IDLE_TIMEOUT_DEFAULT = 600   # 10 minutes (ADR-07)
 POLL_INTERVAL_DEFAULT = 30   # seconds between watchdog passes
+HOOK_INTERVAL_DEFAULT = 600  # 10 min: periodic-hook cadence (cron replacement, ADR-07)
 
 # ── Registry: profile → registered port (parsed from ports.env, ADR-06) ────
 
@@ -182,6 +183,31 @@ def shutdown_daemon(profile: str, timeout: float = 10.0):
             pass
     REGISTRY.remove(profile)
     return True, "stopped"
+
+# ── Periodic hook (ADR-07: cron replacement) ───────────────────────────────
+
+
+def hook_runner(script: str, interval: int):
+    """Run a host script on a fixed cadence inside the launcher process.
+
+    This is the ADR-07 replacement for cron/systemd timers: the launcher
+    already runs as the long-lived execution-plane parent, so it can host
+    periodic maintenance hooks (e.g. watchdog-locks.sh). Failures are
+    logged and never kill the launcher; a hung hook is killed after half
+    the interval."""
+    while True:
+        time.sleep(interval)
+        try:
+            subprocess.run(["bash", script],
+                           timeout=max(60, interval // 2),
+                           check=False, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
+            print(f"[hook] ran {script}", flush=True)
+        except subprocess.TimeoutExpired:
+            print(f"[hook] {script} timed out", flush=True)
+        except Exception as exc:
+            print(f"[hook] {script}: {exc}", flush=True)
+
 
 # ── Idle watchdog ──────────────────────────────────────────────────────────
 
@@ -340,7 +366,8 @@ class Server(ThreadingHTTPServer):
     allow_reuse_address = True
 
 
-def serve(host: str, port: int, idle_timeout: int, poll_interval: int):
+def serve(host: str, port: int, idle_timeout: int, poll_interval: int,
+          hook_script: str = None, hook_interval: int = HOOK_INTERVAL_DEFAULT):
     Handler.launcher_secret = os.environ.get("LAUNCHER_SECRET") or None
     if host != "127.0.0.1" and not Handler.launcher_secret:
         print("FATAL: non-loopback bind without LAUNCHER_SECRET "
@@ -350,6 +377,11 @@ def serve(host: str, port: int, idle_timeout: int, poll_interval: int):
         target=idle_watchdog, args=(idle_timeout, poll_interval),
         daemon=True, name="idle-watchdog",
     ).start()
+    if hook_script:
+        threading.Thread(
+            target=hook_runner, args=(hook_script, hook_interval),
+            daemon=True, name="periodic-hook",
+        ).start()
     print(f"[launcher] listening on http://{host}:{port} "
           f"(idle-timeout={idle_timeout}s, poll={poll_interval}s, "
           f"secret={'on' if Handler.launcher_secret else 'off'})",
@@ -365,8 +397,13 @@ def main():
                     default=int(os.environ.get("LAUNCHER_PORT", "9000")))
     ap.add_argument("--idle-timeout", type=int, default=IDLE_TIMEOUT_DEFAULT)
     ap.add_argument("--poll-interval", type=int, default=POLL_INTERVAL_DEFAULT)
+    ap.add_argument("--hook-script", default=None,
+                    help="host script run periodically by the launcher "
+                         "(ADR-07 cron replacement, e.g. watchdog-locks.sh)")
+    ap.add_argument("--hook-interval", type=int, default=HOOK_INTERVAL_DEFAULT)
     args = ap.parse_args()
-    serve(args.host, args.port, args.idle_timeout, args.poll_interval)
+    serve(args.host, args.port, args.idle_timeout, args.poll_interval,
+          args.hook_script, args.hook_interval)
 
 
 if __name__ == "__main__":

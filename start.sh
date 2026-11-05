@@ -25,6 +25,8 @@ else
   echo "[start] starting Host Launcher on :${LAUNCHER_PORT} ..."
   mkdir -p "$ROOT/storage"
   nohup python3 "$LAUNCHER" --host "${LAUNCHER_HOST:-127.0.0.1}" --port "$LAUNCHER_PORT" \
+    --hook-script "$ROOT/execution-plane/scripts/watchdog-locks.sh" \
+    --hook-interval 600 \
     >> "$LOG" 2>&1 &
   echo "[start] launcher pid $! (log: $LOG)"
   # wait for readiness
