@@ -1,1 +1,35 @@
-{}
+{
+  "schema_version": "1.0",
+  "description": "Sisyphus Phase 4 security policy specification. Goose 1.56.0 does not natively support pattern-based rules (e.g., command arguments or file path matching) in its permission.yaml, which is tool-name-based only. This file defines the required security policy; enforcement of pattern-based rules requires a custom enforcement layer or an external wrapper.",
+  "enforcement_notes": "Goose 1.56.0 only supports tool-level permissions in ~/.config/goose/permission.yaml (always_allow, ask_before, never_allow). The pattern rules below cannot be enforced by goose natively; they must be enforced via a wrapper, supervisor, or custom security layer.",
+  "rules": [
+    {
+      "id": "block_env_secrets",
+      "type": "block",
+      "pattern": "*.env, secrets/, credentials/, .env, .env.*",
+      "action": "block",
+      "reason": "Prevent access to environment variables or files containing secrets."
+    },
+    {
+      "id": "block_rm_rf",
+      "type": "block",
+      "pattern": "rm -rf *",
+      "action": "block",
+      "reason": "Prevent destructive recursive file deletions."
+    },
+    {
+      "id": "git_push_main_approval",
+      "type": "ask_before",
+      "pattern": "git push*main*",
+      "action": "ask_before",
+      "reason": "Require explicit approval before pushing to the main branch."
+    },
+    {
+      "id": "allow_pytest",
+      "type": "always_allow",
+      "pattern": "pytest*",
+      "action": "always_allow",
+      "reason": "Allow running pytest for testing."
+    }
+  ]
+}

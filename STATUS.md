@@ -10,7 +10,7 @@ implementation-verified).
 | 1 | Monorepo scaffolding | ✅ Done (`7fa1fda`, `52f138e`) |
 | 2 | Execution plane daemons | ✅ Done (`d3c0c0a`, `1cc513a`) |
 | 3 | Control plane (Paperclip) | ✅ Done (`c3224d2`, `67aba3f`, `de6a38a`) |
-| 4 | Security mitigations | ⬜ **Next** |
+| 4 | Security mitigations | ✅ Done (env scrub verified, smart_approve confirmed, SQLite journal-mode enforced) |
 | 5 | Reliability watchdog | ⬜ Pending |
 | 6 | E2E validation & Go/No-Go | ⬜ Pending |
 
@@ -75,20 +75,46 @@ implementation-verified).
   traffic; launcher stays loopback-only by design.
 
 ## Blockers / open items
+### Phase 4 — Security mitigations (as-built, 2026-11-05)
 
-1. **Human step (pending):** Paperclip first-run onboarding at
-   <http://localhost:3000> (`bootstrap_pending`). Unblocks the smoke-ticket
-   test (Phase 6) and the full pipeline approval test (Phase 4).
-2. **`run.ps1` unverified** — no `pwsh` on the reference host; mirrors tested
-   `run.sh` logic.
-3. **LLM keys** — `ANTHROPIC_API_KEY`/`OPENAI_API_KEY` needed in `.env`
-   before agent turns can run (Phase 6 E2E).
-4. **`tool_permissions.json`** is a placeholder `{}` — Phase 4 fills it
-   (schema validated against the installed goose build first).
+- **T1 — CVE-2026-9368 (Hermes `execute_code` env scrub)**: the installed
+  Hermes build (`/opt/hermes-agent`, `tools/code_execution_env.py`) already
+  implements the ADR-02.1 mitigation: `_scrub_child_env` strips
+  `PYTHONPATH`/`PYTHONHOME`, blocks secret-substring env names, and injects
+  `PYTHONDONTWRITEBYTECODE=1`; `_build_child_env` re-injects only trusted
+  entries (staging dir + Hermes root). Every spawn path routes through
+  `_build_child_env` (per-call via `code_execution_tool`, session kernel via
+  `code_kernel.py`, local env via `local.py`) — the "patch only one path"
+  pitfall does not apply. Verified at function level with the real Hermes
+  venv interpreter: poisoned `PYTHONPATH=/tmp/attacker_controlled` and
+  `PYTHONHOME` are stripped, secret-named vars blocked, and the built child
+  env PYTHONPATH is `/tmp/stage:/opt/hermes-agent` only.
+- **T2 — `GOOSE_MODE=smart_approve` at runtime**: launched both profiles via
+  the Host Launcher and inspected `/proc/<pid>/environ`: dev (pid 48481) and
+  reviewer (pid 48516) both report `GOOSE_MODE=smart_approve` with correct
+  per-profile `GOOSE_PATH_ROOT`. Config/env agree; teardown via launcher
+  endpoints only (Goose Desktop pid 21836 untouched).
+- **T3 — `tool_permissions.json` policy installed**:
+  `control-plane/paperclip/config/tool_permissions.json` carries the four
+  target rules (`.env`/secrets block, `rm -rf` block, push-to-main approval,
+  pytest allow) plus an explicit enforcement note that goose 1.56.0 only
+  supports tool-name-level permissions in `permission.yaml` — pattern rules
+  require the Paperclip adapter layer or a wrapper.
+- **T4 — SQLite `journal_mode=delete` (ADR-04)**:
+  `execution-plane/scripts/ensure-sqlite-modes.sh` walks every SQLite DB
+  under `storage/` (not just goose sessions), applies
+  `PRAGMA journal_mode=delete`, and hard-fails if verification finds a
+  non-delete mode; wired into `run.sh` before the engine case. Verified:
+  both profile DBs converted wal -> delete. Observed that a running daemon
+  had reverted its DB to wal, confirming the spec's "DBs change after the
+  script runs" pitfall — the per-start hook is required, not optional.
+- **T5 — `test_security_baseline.sh`**: idempotent verification suite
+  covering all four acceptance checks (SQLite modes, CVE scrub negative
+  test, smart_approve env/config agreement, policy JSON validity). All
+  checks pass (exit 0).
 
-## Next up — Phase 4 (security baseline)
+## Next up — Phase 5 (reliability watchdog)
 
-PYTHONPATH env allowlist patch for Hermes `execute_code` (CVE-2026-9368),
-verify `smart_approve` reaches every daemon runtime, write the tool
-permission policy, enforce SQLite `journal_mode: delete`, run the negative
-permission tests. See `docs/phases/04-security-mitigations.md`.
+Watchdog heartbeat/detection (#3819) and exponential backoff (#6596) against
+the live Paperclip schema (`issues`/`heartbeat_runs`/`routine_runs` tables
+verified present in the paperclip_postgres instance).

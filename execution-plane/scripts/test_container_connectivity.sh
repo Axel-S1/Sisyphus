@@ -53,7 +53,7 @@ docker run --rm --add-host=host.docker.internal:host-gateway curlimages/curl:lat
   -H "Content-Type: application/json" \
   -H "X-Secret-Key: $SECRET" \
   -X POST "http://host.docker.internal:$DEV_PORT/acp" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"1.0","clientCapabilities":{}}}' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{}}}' \
   && echo || echo "ACP_INIT_FAIL"
 
 # --- ACP handshake (reviewer) ---
@@ -63,7 +63,7 @@ docker run --rm --add-host=host.docker.internal:host-gateway curlimages/curl:lat
   -H "Content-Type: application/json" \
   -H "X-Secret-Key: $SECRET" \
   -X POST "http://host.docker.internal:$REV_PORT/acp" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"1.0","clientCapabilities":{}}}' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{}}}' \
   && echo || echo "ACP_INIT_REV_FAIL"
 
 # --- negative auth test: no secret -> expect 401 ---

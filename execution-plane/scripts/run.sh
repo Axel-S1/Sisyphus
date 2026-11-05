@@ -56,6 +56,11 @@ if [[ -d "$HERMES_CFG_SRC" ]] && compgen -G "$HERMES_CFG_SRC/*" >/dev/null; then
   done
 fi
 
+# ── Phase 4 (T4): Enforce SQLite journal_mode=delete for all profiles ───
+# Run before daemon startup to guarantee DB journal modes are compliant
+# with the Sisyphus security and stability requirements (CVE-2026-9368).
+bash "$ROOT/execution-plane/scripts/ensure-sqlite-modes.sh"
+
 case "$ENGINE" in
   hermes)
     command -v hermes >/dev/null 2>&1 || {
