@@ -1,18 +1,23 @@
 # Phase 4/6 — Security Mitigations (MVP security baseline)
 
-> Status: **Plan** (not yet executed). Spec reference: ADR-02 (§1 emergency
-> patch, §2 MVP approval mode), §5.5 (`execute_code` patch), §5.7 (tool
-> permissions), ADR-04 (SQLite `journal_mode: delete`), §2.4 (permission
-> modes). Depends on: Phase 2 (daemons) for Goose settings; Phase 3 running
-> for the negative tests.
+> Status: **Plan** (not yet executed — re-opened by the 2026-11-06
+> Refactoring & Security Sprint; an earlier aborted run left partial
+> artifacts — a tracked `permission.yaml` policy and the env-scrub already
+> present in the installed Hermes build — but **no acceptance criterion has
+> been verified**). Spec reference: ADR-02 (§1 emergency patch, §2 MVP
+> approval mode), §5.5 (`execute_code` patch), §5.7 (tool permissions),
+> §2.4 (permission modes). *ADR-04 (SQLite journal modes) was withdrawn in
+> the sprint — see the spec.* Depends on: Phase 2 (daemons) for Goose
+> settings; Phase 3 running for the negative tests.
 
 ## Objective
 
 Apply the MVP security baseline: neutralize CVE-2026-9368 (RCE via
 `PYTHONPATH` → API-key exfiltration), force human approval for destructive
-Goose actions (`GOOSE_MODE=smart_approve`), enforce path/command blocking
-rules, and eliminate the SQLite WAL-on-virtiofs failure mode
-(`DeletedWalGenerationError`).
+Goose actions (`GOOSE_MODE=smart_approve`), and enforce path/command
+blocking rules. *(The former "SQLite `journal_mode: delete`" task was
+withdrawn with ADR-04 — the Execution Plane runs natively on the host
+filesystem, where WAL is correct.)*
 
 ## Why (risk mapping)
 
@@ -22,8 +27,6 @@ rules, and eliminate the SQLite WAL-on-virtiofs failure mode
 - **R7 (Critical):** `GOOSE_MODE=auto` without sandbox → destructive commands.
   Sandbox arrives post-MVP (spec Phase 3); until then `smart_approve` is
   mandatory.
-- **R5:** WAL journal mode on Docker virtual mounts → `DeletedWalGenerationError`
-  → all new sessions blocked.
 
 ## Verified environment facts (from Phases 1–3, 2026-11-04)
 
@@ -60,8 +63,7 @@ def _sanitized_env() -> dict:
     """Strict allowlist: neutralizes PYTHONPATH and any module-injection
     vector (CVE-2026-9368)."""
     env = {k: v for k, v in os.environ.items() if k in _ENV_ALLOWLIST}
-    env.pop("PYTHONPATH", None)  # redundant, defense in depth
-    env["PYTHONPATH"] = ""       # explicitly empty
+    env.pop("PYTHONPATH", None)  # stripped — never re-added (CVE-2026-9368)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     return env
 
@@ -101,45 +103,32 @@ same rules there):
 }
 ```
 
-### 4. SQLite `journal_mode: delete` (ADR-04)
-
-For every SQLite DB under `storage/` (Hermes `state.db`, Goose `sessions.db`,
-any Paperclip-side DB on a bind mount):
-
-```sql
-PRAGMA journal_mode = delete;   -- must return 'delete'
-```
-
-Apply as: (a) persistent engine config where supported, else (b) an idempotent
-post-start script `execution-plane/scripts/ensure-sqlite-modes.sh` that runs
-the PRAGMA against every DB file under `storage/hermes_data/**` and
-`storage/goose_data/**`, wired into `run.sh` (post-launch hook — the ADR-07
-replacement for `ExecStartPre=`). Note the pitfall: DBs created *after* the
-script runs need the same treatment — make it idempotent and scheduled
-(launcher-side periodic hook is acceptable).
-
-### 5. Verification tests
+### 4. Verification tests
 
 - **PYTHONPATH negative test:** from a Hermes `execute_code` call, run
   `python3 -c "import hermes_cli"` (or the injection-shaped import) — it
   **must fail**; also dump `os.environ` from inside and assert `PYTHONPATH`
-  is empty.
+  is absent (the deployed build's trusted re-injection —
+  `/tmp/stage:/opt/hermes-agent` — is the only allowed exception, see
+  spec §5.5).
 - **Permission negative tests:** ask the dev-profile Goose to read `.env` →
   **blocked**; run `pytest` → allowed; `rm -rf /` → blocked; push to `main`
-  → approval required.
-- **SQLite:** `PRAGMA journal_mode` returns `delete` for every DB under
-  `storage/`.
+  → approval required. *(Note: `pytest` allow and the pattern blocks are not
+  expressible in goose's tool-name-level `permission.yaml` — the negative
+  tests validate the transitive gating (`shell`/`read` in `ask_before`)
+  until the wrapper enforcement layer exists.)*
 
 ## Acceptance criteria
 
-- [ ] `execute_code` subprocess env is allowlisted; `PYTHONPATH` empty;
-      module-injection import fails from within it.
+- [ ] `execute_code` subprocess env is allowlisted; `PYTHONPATH` absent
+      (trusted re-injection per spec §5.5 allowed); module-injection import
+      fails from within it.
 - [ ] All Goose profiles run with `GOOSE_MODE=smart_approve` (verify in
       daemon runtime env via `/proc/<pid>/environ`).
-- [ ] Tool-permission policy installed (JSON or `config.yaml` equivalent)
-      and negative tests pass (`.env` blocked, `rm -rf /` blocked, push→main
-      approval, `pytest` allowed).
-- [ ] Every SQLite DB under `storage/` reports `journal_mode = delete`.
+- [ ] Tool-permission policy installed (`permission.yaml` + the
+      `tool_permissions.json` pattern contract) and negative tests pass
+      (`.env` blocked, `rm -rf /` blocked, push→main approval, `pytest`
+      allowed — pattern rules via the wrapper layer).
 - [ ] A destructive-action request through the full pipeline (Paperclip →
       adapter → Goose) surfaces a human-approval prompt, not silent
       execution. *(Requires the Paperclip one-time onboarding to be done —

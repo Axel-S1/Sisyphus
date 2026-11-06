@@ -43,11 +43,11 @@ Reproduced from spec §8 (v2.2 wording — validated facts marked):
       localhost bind or the stdio command `goose acp` in use).
 - [x] **401 without** the secret (negative auth test) — confirmed Phase 3.
 - [ ] Hermes endpoint answers from inside the container (with auth provider
-      credentials) — setup lands with agent wiring.
+      credentials) — setup lands with agent wiring. *(An earlier draft of
+      this doc pre-checked this item as "verified Phase 6"; that claim was
+      removed in the 2026-11-06 re-alignment — no such verification exists.)*
 - [x] Two Goose profiles on **distinct ports** (ADR-06) launched
       **concurrently** → zero cross-writes to configs — confirmed Phase 2.
-- [ ] `PRAGMA journal_mode` returns `delete` for every database on a Docker
-      mount (Phase 4).
 - [ ] `execute_code` runs with an empty `PYTHONPATH`; `import hermes_cli`
       fails from within it (Phase 4).
 - [ ] Fresh-session-per-run contract verified in the live adapter config

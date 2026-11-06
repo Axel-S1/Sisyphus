@@ -1,3 +1,8 @@
 # Goose profile config — dev (seeded into $GOOSE_PATH_ROOT/config/config.yaml by run.sh)
-# MVP: smart_approve only — never auto (Risk R7). tool_permissions.json rules arrive in Phase 4.
+# MVP: smart_approve only — never auto (Risk R7). tool_permissions.json rules arrived in Phase 4.
+# Provider wiring: cloud LLM API per spec §1.2 ("apart from cloud LLM APIs in Phase 1");
+# local inference is explicitly OUT of MVP scope (post-MVP milestone).
+# Mirrors the working desktop provider (key resolved from the system keyring — never in config.yaml).
 GOOSE_MODE: smart_approve
+GOOSE_PROVIDER: openrouter
+GOOSE_MODEL: z-ai/glm-5.3-flash

@@ -1,8 +1,18 @@
 # Phase 5/6 — Reliability: Lock Watchdog (#3819) + Network Backoff (#6596)
 
-> Status: **Plan** (not yet executed). Spec reference: ADR-05 (#3819, #6596),
-> §5.4 (watchdog SQL + liveness semantics), Risks R3/R6/R10.
-> Depends on: Phase 3 (running Paperclip + PostgreSQL/Drizzle).
+> Status: **Plan** (not yet executed — re-opened by the 2026-11-06
+> Refactoring & Security Sprint; an earlier aborted run left
+> `watchdog-locks.sh` in place, but **none of its acceptance criteria have
+> been verified**). Spec reference: ADR-05 (#3819, #6596), §5.4 (watchdog
+> SQL + liveness semantics), Risks R3/R6/R10. Depends on: Phase 3 (running
+> Paperclip + PostgreSQL/Drizzle).
+>
+> ⚠️ **Task 2 re-planning note:** the aborted run's `backoff_proxy.py` was
+> **deleted** as structural debt — it was never referenced by any adapter
+> config, compose file, or startup script, so the #6596 mitigation existed
+> only as an unreachable standalone script. Re-implement per this doc's
+> implementation note (adapter-config-level retry if the real schema
+> supports it) **with wiring**, or record the deferral explicitly.
 
 ## Objective
 
