@@ -1,24 +1,21 @@
 #!/usr/bin/env bash
 # test_security_baseline.sh — Phase 4 (T5) verification suite.
 # Checks, non-interactively:
-#   1. SQLite: every DB under storage/ reports journal_mode=delete (ADR-04).
-#   2. Hermes CVE-2026-9368: _scrub_child_env / _build_child_env strip
+#   1. Hermes CVE-2026-9368: _scrub_child_env / _build_child_env strip
 #      PYTHONPATH/PYTHONHOME and block secret-named vars (module-injection
 #      negative test, function level — the exact code execute_code spawns with).
-#   3. Goose smart_approve: .env and both profile config.yaml agree on
-#      GOOSE_MODE=smart_approve (runtime /proc check documented in STATUS.md;
-#      requires running daemons — see phase4 t2 log).
-#   4. tool_permissions.json parses as valid JSON.
+#   2. Goose smart_approve: .env and both profile config.yaml agree on
+#      GOOSE_MODE=smart_approve (runtime /proc check requires running daemons
+#      — see the phase-4 verification procedure).
+#   3. tool_permissions.json parses as valid JSON.
+# (The former SQLite journal_mode=delete check was withdrawn with ADR-04 —
+# native host filesystem, WAL is correct. See spec v2.3 changelog.)
 set -u
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 fail=0
 
-echo "=== [1/4] SQLite journal_mode=delete under storage/ ==="
-bash "$ROOT/execution-plane/scripts/ensure-sqlite-modes.sh" || fail=1
-
-echo
-echo "=== [2/4] Hermes CVE-2026-9368 env-scrub negative test ==="
+echo "=== [1/3] Hermes CVE-2026-9368 env-scrub negative test ==="
 HERMES_PY="/opt/hermes-agent/venv/bin/python"
 if [ ! -x "$HERMES_PY" ]; then
     echo "[ERROR] Hermes venv python not found at $HERMES_PY"
@@ -49,19 +46,15 @@ EOF
 fi
 
 echo
-echo "=== [3/4] GOOSE_MODE=smart_approve in .env and profile configs ==="
+echo "=== [2/3] GOOSE_MODE=smart_approve in .env and profile configs ==="
 grep -q '^GOOSE_MODE=smart_approve$' .env || { echo "[ERROR] .env lacks GOOSE_MODE=smart_approve"; fail=1; }
-for cfg in storage/goose_data/agent_dev/config.yaml storage/goose_data/agent_reviewer/config.yaml; do
-    if [ -f "$cfg" ]; then
-        grep -q 'smart_approve' "$cfg" || { echo "[ERROR] $cfg lacks smart_approve"; fail=1; }
-    else
-        echo "[WARN] $cfg not present (created on first daemon start; run.sh seeds it)"
-    fi
+for cfg in execution-plane/profiles/dev/goose_config/config.yaml execution-plane/profiles/reviewer/goose_config/config.yaml; do
+    grep -q 'smart_approve' "$cfg" || { echo "[ERROR] $cfg lacks smart_approve"; fail=1; }
 done
 echo "[OK] checked" ; true
 
 echo
-echo "=== [4/4] tool_permissions.json valid JSON ==="
+echo "=== [3/3] tool_permissions.json valid JSON ==="
 python3 -c "import json;json.load(open('control-plane/paperclip/config/tool_permissions.json'))" \
     && echo "[OK] valid JSON" || fail=1
 

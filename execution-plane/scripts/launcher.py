@@ -57,7 +57,7 @@ HOOK_INTERVAL_DEFAULT = 600  # 10 min: periodic-hook cadence (cron replacement, 
 
 
 def load_port_registry() -> dict:
-    """Parse ports.env into {'HERMES_PORT_CEo': 8642, ...}."""
+    """Parse ports.env into {'HERMES_PORT_CEO': 8642, ...}."""
     registry = {}
     try:
         with open(PORTS_ENV) as fh:
@@ -76,7 +76,7 @@ def port_for_profile(profile: str, engine: str, registry: dict):
     """Resolve the ADR-06 registered port for a profile+engine, or None."""
     prefix = "HERMES_PORT" if engine == "hermes" else "GOOSE_PORT"
     if profile == "ceo":
-        key = f"{prefix}_CEo"
+        key = f"{prefix}_CEO"
     else:
         key = f"{prefix}_{profile.upper()}"
     val = registry.get(key)

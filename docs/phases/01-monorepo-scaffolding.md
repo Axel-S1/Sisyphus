@@ -72,7 +72,7 @@ execution-plane/workspace/*
 ### `execution-plane/scripts/ports.env.example` (ADR-06)
 
 ```
-HERMES_PORT_CEo=8642
+HERMES_PORT_CEO=8642
 GOOSE_PORT_DEV=3284
 GOOSE_PORT_REVIEWER=3285
 ```

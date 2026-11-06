@@ -17,9 +17,10 @@ Behaviour (full source in the script):
    creates both dirs, hard-fails if either variable ends up empty.
 4. Seeds the profile config into the engine's isolated root **without
    overwriting** existing files (never clobbers live state).
-5. **ADR-06 port registry** lookup: `HERMES_PORT_CEo`, `GOOSE_PORT_DEV`,
-   `GOOSE_PORT_REVIEWER` … (exact registry names; `CEo` is the registry's
-   casing), hard-fails on a missing port entry.
+5. **ADR-06 port registry** lookup: `HERMES_PORT_CEO`, `GOOSE_PORT_DEV`,
+   `GOOSE_PORT_REVIEWER` … (exact registry names; `HERMES_PORT_CEO` was
+   renamed from the historical `HERMES_PORT_CEo` typo in the 2026-11-06
+   sprint), hard-fails on a missing port entry.
 6. Engine selection (v2.2 verified commands):
    - **Goose**: `GOOSE_MODE=smart_approve`, then
      `goose serve --host 0.0.0.0 --port <GOOSE_PORT_*>`.

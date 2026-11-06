@@ -29,11 +29,11 @@ mkdir -p "$HERMES_HOME" "$GOOSE_PATH_ROOT"
 [[ -n "${HERMES_HOME:-}" && -n "${GOOSE_PATH_ROOT:-}" ]] || {
   echo "FATAL: HERMES_HOME / GOOSE_PATH_ROOT not set" >&2; exit 1; }
 
-# ── ADR-06 port lookup (exact registry names: HERMES_PORT_CEo, GOOSE_PORT_DEV, …)
+# ── ADR-06 port lookup (exact registry names: HERMES_PORT_CEO, GOOSE_PORT_DEV, …)
 port_from_registry() {  # $1 = profile, $2 = var prefix ("HERMES_PORT"|"GOOSE_PORT")
   local profile="$1" prefix="$2" var val
   case "$profile" in
-    ceo) var="${prefix}_CEo" ;;          # registry name per phase-1 template
+    ceo) var="${prefix}_CEO" ;;          # registry name per phase-1 template
     *)   var="${prefix}_${profile^^}" ;;
   esac
   val="${!var:-}"
@@ -60,11 +60,6 @@ if [[ -d "$HERMES_CFG_SRC" ]] && compgen -G "$HERMES_CFG_SRC/*" >/dev/null; then
     [[ -e "$HERMES_HOME/$(basename "$f")" ]] || cp "$f" "$HERMES_HOME/"
   done
 fi
-
-# ── Phase 4 (T4): Enforce SQLite journal_mode=delete for all profiles ───
-# Run before daemon startup to guarantee DB journal modes are compliant
-# with the Sisyphus security and stability requirements (CVE-2026-9368).
-bash "$ROOT/execution-plane/scripts/ensure-sqlite-modes.sh"
 
 case "$ENGINE" in
   hermes)

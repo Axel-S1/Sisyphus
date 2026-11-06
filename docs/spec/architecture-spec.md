@@ -244,7 +244,7 @@ Three measures, **all mandatory and complementary**:
 ### ADR-06 — Multi-profile port registry (single URL per adapter is not enough)
 
 - **Decision**: one server per **profile** ⇒ one **port per profile**, declared in `execution-plane/scripts/ports.env` (local copy of `ports.env.example`, git-ignored):
-  - `HERMES_PORT_CEo=8642`, `GOOSE_PORT_DEV=3284`, `GOOSE_PORT_REVIEWER=3285`.
+  - `HERMES_PORT_CEO=8642`, `GOOSE_PORT_DEV=3284`, `GOOSE_PORT_REVIEWER=3285`.
 - **Consumers**: `run.sh`/`run.ps1` pass the port to the engine (Goose: `--port` CLI flag; Hermes: `--port` flag) and the Control Plane adapters target `http://host.docker.internal:<port>`.
 - **Rationale**: without the registry the two-concurrent-profiles collision test cannot be constructed, and two profiles on one port = guaranteed crash-loop.
 
@@ -429,7 +429,7 @@ Key behaviours (full source: `execution-plane/scripts/run.sh`):
 - Seeds the profile config (`config.yaml` **and** `permission.yaml` — the
   tracked tool-level policy) into the engine's isolated root **without
   overwriting** existing files.
-- ADR-06 port lookup from the registry (`HERMES_PORT_CEo`, `GOOSE_PORT_DEV`, …).
+- ADR-06 port lookup from the registry (`HERMES_PORT_CEO`, `GOOSE_PORT_DEV`, …).
 - Engines (v2.2 verified commands):
   - `hermes serve --port <HERMES_PORT_*> --host 0.0.0.0`
   - `goose serve --host 0.0.0.0 --port <GOOSE_PORT_*>` (flags — env vars are
