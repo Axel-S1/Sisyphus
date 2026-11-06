@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# run.sh — Execution Plane bootstrap (Hermes gateway / goose serve).
+# run.sh — Execution Plane bootstrap (hermes serve / goose serve).
 # Spec: §2.3, §2.4, ADR-01, ADR-03 (symmetric HERMES_HOME + GOOSE_PATH_ROOT),
 # ADR-06 (port registry), §5.6. One server per profile, one port per profile.
 #
 # Usage: run.sh <profile> [hermes|goose|auto]
-#   ./run.sh ceo hermes      # Hermes gateway  (port from ports.env)
+#   ./run.sh ceo hermes      # hermes serve    (port from ports.env)
 #   ./run.sh dev goose       # goose serve     (HTTP/WS ACP, port from ports.env)
 set -euo pipefail
 
@@ -70,18 +70,22 @@ case "$ENGINE" in
   hermes)
     command -v hermes >/dev/null 2>&1 || {
       echo "FATAL: 'hermes' binary not found on PATH (Execution Plane requires it)" >&2; exit 127; }
-    # .env defines HERMES_API_KEY (Hermes's API_SERVER_KEY); accept either name.
-    export API_SERVER_KEY="${API_SERVER_KEY:-${HERMES_API_KEY:?HERMES_API_KEY required (Hermes gateway auth)}}"
-    # Phase 6 correction (spec v2.2 §2.3 note is outdated): Paperclip's
-    # hermes_gateway adapter drives runs via POST /v1/runs on Hermes's
-    # api_server platform — which lives in `hermes gateway`, NOT in the
-    # `hermes serve` dashboard backend (which has no /v1/runs routes).
-    # Port/host are injected via API_SERVER_PORT/API_SERVER_HOST env
-    # (ADR-06 one port per profile). Non-loopback bind needs a dashboard
-    # session token escape hatch (HERMES_DASHBOARD_SESSION_TOKEN in .env).
+    # Hermes's HTTP backend server is `hermes serve` — live-verified against
+    # the installed build (2026-11-06): `hermes serve --help` describes it as
+    # "the JSON-RPC/WebSocket gateway the desktop app and remote clients
+    # connect to", with --port/--host flags. `hermes gateway` is
+    # messaging-platform management (Telegram/Discord/WhatsApp) with NO
+    # --port — never use it as the network daemon (Risk R9). The earlier
+    # "gateway is the /v1/runs backend" claim in an uncommitted draft was
+    # WRONG and is reverted to the spec-verified command.
+    # Non-loopback binds require Hermes's own auth provider (password/OAuth;
+    # --insecure is a documented no-op). API_SERVER_KEY / HERMES_API_KEY stay
+    # exported (either name accepted) for adapter credential wiring, but are
+    # optional here — the auth provider is the real binding gate.
+    export API_SERVER_KEY="${API_SERVER_KEY:-${HERMES_API_KEY:-}}"
     export API_SERVER_PORT="$(port_from_registry "$PROFILE" HERMES_PORT)"
     export API_SERVER_HOST="0.0.0.0"
-    exec hermes gateway run -q ;;
+    exec hermes serve --port "$API_SERVER_PORT" --host "$API_SERVER_HOST" ;;
   goose)
     command -v goose >/dev/null 2>&1 || {
       echo "FATAL: 'goose' binary not found on PATH (Execution Plane requires it)" >&2; exit 127; }
@@ -89,9 +93,9 @@ case "$ENGINE" in
     export GOOSE_SERVER__HOST="${GOOSE_SERVER__HOST:-0.0.0.0}"  # must accept host.docker.internal
     export GOOSE_SERVER__PORT="$(port_from_registry "$PROFILE" GOOSE_PORT)"
     export GOOSE_SERVER__SECRET_KEY="${GOOSE_SERVER__SECRET_KEY:?GOOSE_SERVER__SECRET_KEY required}"
-    # Phase 6 negative-test fix: goose 1.56.0 reads permission.yaml from the
-    # global ~/.config/goose (no GOOSE_CONFIG_DIR override exists in the
-    # binary). GOOSE_ADDITIONAL_CONFIG_FILES (verified present in the binary's
+    # Profile policy: goose 1.56.0 reads permission.yaml from the global
+    # ~/.config/goose (no GOOSE_CONFIG_DIR override exists in the binary).
+    # GOOSE_ADDITIONAL_CONFIG_FILES (verified present in the binary's
     # config-resolution strings) loads the profile's own policy on top, so the
     # dev/reviewer daemons are gated by their profile policy, not the desktop's.
     export GOOSE_ADDITIONAL_CONFIG_FILES="${GOOSE_PATH_ROOT}/config/permission.yaml"

@@ -1,7 +1,7 @@
 # docker-compose.yml — Sisyphus Control Plane (Phase 3)
 #
 # Control Plane: Paperclip (ghcr.io/paperclipai/paperclip) + PostgreSQL.
-# The Execution Plane (goose serve / hermes gateway) runs natively on the host,
+# The Execution Plane (goose serve / hermes serve) runs natively on the host,
 # spawned on demand by the Host Launcher (ADR-07) — execution-plane/scripts/launcher.py.
 #
 # Real Paperclip image contract (docs.paperclip.ing/reference/deploy/docker/):
