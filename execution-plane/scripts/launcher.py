@@ -17,13 +17,15 @@ Endpoints (JSON over HTTP):
 
 Idle watchdog: every poll interval, profiles idle longer than
 --idle-timeout seconds (default 600 = 10 minutes, per ADR-07) are shut down.
+Liveness is REAL-TRAFFIC based: before reaping a daemon that looks idle, the
+watchdog probes for established TCP connections on the daemon's port — a
+busy agent is never killed even if no client could POST /touch.
 
 Binding (Risk R9 class caution, ADR-07):
-    Default bind is 127.0.0.1 (loopback-only, host-local triggers).
-    If Paperclip (inside Docker) must trigger the launcher, bind 0.0.0.0
-    via LAUNCHER_HOST — a loopback bind silently refuses host.docker.internal
-    traffic. When bound non-loopback, a secret header check is REQUIRED:
-    clients must send `X-Launcher-Secret: <LAUNCHER_SECRET>`.
+    Default bind is 0.0.0.0 so that Paperclip (inside Docker) can trigger
+    daemon spawn/shutdown via host.docker.internal:9000. A non-loopback bind
+    REQUIRES the `X-Launcher-Secret: <LAUNCHER_SECRET>` header check —
+    the launcher hard-fails on startup without a configured secret.
 
 Usage:
     python3 launcher.py [--host 127.0.0.1] [--port 9000]
@@ -214,22 +216,32 @@ def hook_runner(script: str, interval: int):
 
 def idle_watchdog(idle_timeout: int, poll_interval: int):
     """Every poll: for each managed daemon, if idle longer than the timeout,
-    shut it down. Idle is measured since the last /launch or /touch —
-    clients (Paperclip adapters) should POST /touch on each session use so
-    active agents are never reaped."""
+    shut it down — UNLESS the daemon is actually serving traffic. Liveness is
+    probed with port_traffic_since() (established TCP connections on the
+    daemon's port): a busy agent is never reaped, even when no client was
+    able to POST /touch (the previous, traffic-blind behaviour). /touch and
+    /launch still reset the idle timer for idle-but-expected-busy cases."""
     while True:
         time.sleep(poll_interval)
         now = time.time()
         for profile, entry in list(REGISTRY.all().items()):
             idle = now - entry["last_activity"]
             proc = entry["proc"]
+            port = entry["port"]
             if proc.poll() is not None:
                 # daemon died on its own — forget it
                 REGISTRY.remove(profile)
                 continue
             if idle >= idle_timeout:
+                if port_traffic_since(port, idle):
+                    # real traffic on the daemon's port — busy, not idle
+                    REGISTRY.touch(profile)
+                    print(f"[watchdog] {profile} idle-timer expired but port "
+                          f"{port} is serving traffic — kept alive", flush=True)
+                    continue
                 print(f"[watchdog] {profile} idle {int(idle)}s "
-                      f"(>= {idle_timeout}s) — shutting down", flush=True)
+                      f"(>= {idle_timeout}s, no traffic on :{port}) — "
+                      f"shutting down", flush=True)
                 ok, msg = shutdown_daemon(profile)
                 print(f"[watchdog] {profile}: {msg}", flush=True)
 
@@ -392,7 +404,7 @@ def serve(host: str, port: int, idle_timeout: int, poll_interval: int,
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     ap.add_argument("--host", default=os.environ.get("LAUNCHER_HOST",
-                                                     "127.0.0.1"))
+                                                     "0.0.0.0"))
     ap.add_argument("--port", type=int,
                     default=int(os.environ.get("LAUNCHER_PORT", "9000")))
     ap.add_argument("--idle-timeout", type=int, default=IDLE_TIMEOUT_DEFAULT)

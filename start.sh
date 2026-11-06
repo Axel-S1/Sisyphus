@@ -24,7 +24,9 @@ if ss -ltn 2>/dev/null | grep -q ":${LAUNCHER_PORT} "; then
 else
   echo "[start] starting Host Launcher on :${LAUNCHER_PORT} ..."
   mkdir -p "$ROOT/storage"
-  nohup python3 "$LAUNCHER" --host "${LAUNCHER_HOST:-127.0.0.1}" --port "$LAUNCHER_PORT" \
+  # Default bind 0.0.0.0 so Paperclip (in Docker) can reach the launcher via
+  # host.docker.internal:9000; LAUNCHER_SECRET is then REQUIRED (ADR-07).
+  nohup python3 "$LAUNCHER" --host "${LAUNCHER_HOST:-0.0.0.0}" --port "$LAUNCHER_PORT" \
     --hook-script "$ROOT/execution-plane/scripts/watchdog-locks.sh" \
     --hook-interval 600 \
     >> "$LOG" 2>&1 &

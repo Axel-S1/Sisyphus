@@ -26,16 +26,32 @@ if [[ -n "$LPIDS" ]]; then
   pkill -TERM -f 'launcher\.py' 2>/dev/null || true
 fi
 
-# ── 3. Execution Plane daemons ────────────────────────────────────────────
+# ── 3. Execution Plane daemons (repo-managed ONLY) ────────────────────────
+# Teardown safety rule (Phase 3): NEVER a broad pkill — the operator's own
+# desktop goose/hermes sessions also run `goose serve` / `hermes serve` and
+# must survive. We only stop daemons whose environment carries this repo's
+# HERMES_HOME / GOOSE_PATH_ROOT (i.e. spawned via run.sh / the launcher).
 GPIDS="$(pgrep -f 'goose serve' 2>/dev/null || true)"
-HPIDS="$(pgrep -f 'hermes serve' 2>/dev/null || true)"
+HPIDS="$(pgrep -f 'hermes (serve|gateway)' 2>/dev/null || true)"
+
+is_repo_managed() {  # $1 = pid
+  tr '\0' '\n' < "/proc/$1/environ" 2>/dev/null \
+    | grep -qE '^(HERMES_HOME|GOOSE_PATH_ROOT)='"$ROOT"'/storage/'
+}
+
 for p in $GPIDS $HPIDS; do
-  echo "[stop] TERM daemon pid $p"
-  kill -TERM "$p" 2>/dev/null || true
+  if is_repo_managed "$p"; then
+    echo "[stop] TERM repo-managed daemon pid $p"
+    kill -TERM "$p" 2>/dev/null || true
+  else
+    echo "[stop] skipping pid $p (not repo-managed — operator session preserved)"
+  fi
 done
 sleep 2
 for p in $GPIDS $HPIDS; do
-  kill -0 "$p" 2>/dev/null && { echo "[stop] KILL pid $p"; kill -KILL "$p" 2>/dev/null || true; }
+  if is_repo_managed "$p" 2>/dev/null; then
+    kill -0 "$p" 2>/dev/null && { echo "[stop] KILL pid $p"; kill -KILL "$p" 2>/dev/null || true; }
+  fi
 done
 
 echo "[stop] Sisyphus stack stopped."

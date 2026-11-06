@@ -61,6 +61,6 @@
       "headerName": "X-Launcher-Secret",
       "secretEnv": "LAUNCHER_SECRET"
     },
-    "$comment": "ADR-07 — daemon lifecycle management. The launcher binds 127.0.0.1 by default; container-originated triggers to :9000 are refused BY DESIGN (verified Phase 3): Paperclip talks to the adapters directly, not to the launcher. If that topology changes, start it with LAUNCHER_HOST=0.0.0.0 (secret then mandatory)."
+    "$comment": "ADR-07 — daemon lifecycle management. The launcher binds 0.0.0.0 by default (since the Refactoring & Security Sprint, 2026-11) so container-originated triggers REACH it: Paperclip may POST /launch?profile=<p>&engine=<goose|hermes> to spawn a daemon on demand and /touch?profile=<p> to reset its idle timer. The X-Launcher-Secret header is mandatory (non-loopback bind — the launcher hard-fails without a configured secret). The idle watchdog also probes real TCP traffic on the daemon port, so a busy agent is never reaped even without /touch."
   }
 }
