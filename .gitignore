@@ -3,8 +3,12 @@
 ports.env
 
 # ── Spec-mandated ignores ──────────────────────────────────────────
-storage/hermes_data/**/sessions/
-storage/hermes_data/**/logs/
+# R8: agent state under storage/ is NEVER committed. Hermes runtime data
+# (state.db, auth.lock, channel_directory.json, memories/, locks, ...) is
+# ignored wholesale — not just sessions/logs — so `git add -A` cannot leak it.
+storage/hermes_data/**
+!storage/hermes_data/**/
+!storage/hermes_data/**/.gitkeep
 storage/goose_data/**
 !storage/goose_data/**/
 !storage/goose_data/**/.gitkeep
@@ -18,5 +22,6 @@ execution-plane/workspace/*
 # ── General hygiene ────────────────────────────────────────────────
 node_modules/
 __pycache__/
+.pytest_cache/
 *.pyc
 .DS_Store

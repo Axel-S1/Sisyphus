@@ -374,12 +374,20 @@ def _sanitized_env() -> dict:
     """Strict allowlist: neutralizes PYTHONPATH and any module-injection
     vector (CVE-2026-9368). Applied to EVERY subprocess spawn."""
     env = {k: v for k, v in os.environ.items() if k in _ENV_ALLOWLIST}
-    env["PYTHONPATH"] = ""                     # explicitly empty
+    env.pop("PYTHONPATH", None)   # stripped — never re-added (CVE-2026-9368)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     return env
 
 # subprocess.Popen(..., env=_sanitized_env(), ...)
 ```
+
+> **Contract:** `PYTHONPATH` is **removed** from the child environment — not
+> emptied, not re-added. (An earlier revision of this snippet popped the key
+> and then re-assigned it to `""`, contradicting itself.) **Known deviation in
+> the deployed build (Hermes v0.22.7):** its `_build_child_env` re-injects a
+> *trusted* `PYTHONPATH` (`/tmp/stage:/opt/hermes-agent`) after the scrub;
+> attacker-controlled entries are stripped. Accepted as long as the trusted
+> entries are verified non-attacker-controlled.
 
 ### 5.6 `run.sh` (bootstrap wrapper — as built, verified)
 
@@ -389,7 +397,8 @@ Key behaviours (full source: `execution-plane/scripts/run.sh`):
 - Loads `.env` + `ports.env`; **hard-fails** if either is missing.
 - **Symmetric injection (ADR-03)**: exports both `HERMES_HOME` and
   `GOOSE_PATH_ROOT` per profile, `mkdir -p` both, hard-fails if unset.
-- Seeds the profile config into the engine's isolated root **without
+- Seeds the profile config (`config.yaml` **and** `permission.yaml` — the
+  tracked tool-level policy) into the engine's isolated root **without
   overwriting** existing files.
 - ADR-06 port lookup from the registry (`HERMES_PORT_CEo`, `GOOSE_PORT_DEV`, …).
 - Engines (v2.2 verified commands):

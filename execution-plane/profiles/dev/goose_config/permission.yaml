@@ -1,0 +1,36 @@
+# Goose permission policy — Sisyphus MVP baseline (TRACKED source of truth).
+# Mirrored into both the dev and reviewer profiles; kept in sync with
+# control-plane/paperclip/config/tool_permissions.json.
+#
+# Goose 1.56.0 natively enforces TOOL-NAME-level rules only (the three lists
+# below). Pattern-based rules (command arguments / file paths) require the
+# wrapper enforcement layer described in tool_permissions.json
+# (enforcement_notes) — goose cannot express them natively.
+#
+# Intent mapping to tool_permissions.json (durable policy content):
+#   block  .env / secrets/ / id_rsa / .ssh/  -> covered transitively: every
+#       tool that could read those paths (read, write, edit, shell,
+#       read_image) is human-gated under ask_before, so no secret file can be
+#       touched without explicit approval (a native `read` allow would have
+#       permitted verbatim .env exfiltration).
+#   block  `rm -rf`                          -> destructive shell runs are
+#       gated by `shell` being in ask_before (pattern block needs the wrapper).
+#   require_approval  `git push ... main`    -> shell is ask_before (pattern
+#       match needs the wrapper).
+#   allow   pytest / npm test / cargo test   -> NOT expressible at tool-name
+#       level (tests run via `shell`, which must stay gated); enforcement is
+#       deferred to the wrapper layer (tool_permissions.json: allow_pytest).
+smart_approve:
+  always_allow: []
+  ask_before:
+  - extensionmanager__manage_extensions
+  - read
+  - write
+  - edit
+  - shell
+  - read_image
+  never_allow: []
+user:
+  always_allow: []
+  ask_before: []
+  never_allow: []
