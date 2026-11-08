@@ -100,7 +100,7 @@ shopt -u nullglob
 [[ "$MISSING_LINKS" == 0 ]] || warn "text-state links incomplete — memories/config may not follow the synced repo."
 
 # ── 5. Confirmation (DESTRUCTIVE: drops public schema) ─────────────────────
-dump_date="$(head -c 4096 "$DUMP" | grep -m1 -oE '-- Dumped from database version [^ ]*' || true)"
+dump_date="$(head -c 4096 "$DUMP" | grep -m1 -oE -e '-- Dumped from database version [^ ]*' || true)"
 echo
 echo "  About to DESTROY and restore the local Paperclip database:"
 echo "    DROP SCHEMA public CASCADE;  →  restore paperclip-backup.sql"
@@ -115,6 +115,7 @@ fi
 msg "dropping public schema..."
 docker exec -i paperclip_postgres psql -U paperclip -d paperclip -v ON_ERROR_STOP=1 -q \
   -c 'DROP SCHEMA public CASCADE;' -c 'CREATE SCHEMA public;' \
+  -c 'DROP SCHEMA IF EXISTS drizzle CASCADE;' \
   || die "failed to drop schema — database untouched by restore step."
 
 msg "restoring dump (this can take a moment)..."
