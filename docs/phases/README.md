@@ -4,7 +4,7 @@ This directory contains the **execution plan to reach the MVP** of the
 "Local-First Multi-Agent System" (Paperclip · Hermes · Goose).
 
 Source of truth: [`../spec/architecture-spec.md`](../spec/architecture-spec.md)
-(v2.2 — post-audit, implementation-verified). The MVP is the spec's **Phase 1**,
+(v2.4). The MVP is the spec's **Phase 1**,
 decomposed here into **6 sequential sub-phases**, each sized for one autonomous
 agent run.
 
@@ -17,8 +17,8 @@ agent run.
 | 1 | [`01-monorepo-scaffolding.md`](01-monorepo-scaffolding.md) | Repo tree, `.gitignore`, `.env.example`, `ports.env.example` (ADR-06) | ✅ Done | — |
 | 2 | [`02-execution-plane-daemons.md`](02-execution-plane-daemons.md) | `run.sh`/`run.ps1`, Hermes + Goose daemons, profiles, collision test | ✅ Done | 01 |
 | 3 | [`03-control-plane-paperclip.md`](03-control-plane-paperclip.md) | Real Paperclip + PostgreSQL in Docker, `adapters.json`, Host Launcher (ADR-07), connectivity tests | ✅ Done | 01, 02 |
-| 4 | [`04-security-mitigations.md`](04-security-mitigations.md) | `PYTHONPATH` patch (CVE-2026-9368), `GOOSE_MODE=smart_approve`, tool-permission policy | ⬜ **Pending** (re-opened 2026-11-06) | 02 |
-| 5 | [`05-reliability-watchdog.md`](05-reliability-watchdog.md) | Orphaned-lock watchdog (#3819, liveness semantics), exponential backoff (#6596) | ⬜ **Pending** (re-opened 2026-11-06) | 03 |
+| 4 | [`04-security-mitigations.md`](04-security-mitigations.md) | `PYTHONPATH` patch (CVE-2026-9368), `GOOSE_MODE=smart_approve`, tool-permission policy | ⬜ **Pending** | 02 |
+| 5 | [`05-reliability-watchdog.md`](05-reliability-watchdog.md) | Orphaned-lock watchdog (#3819, liveness semantics), exponential backoff (#6596) | ⬜ **Pending** | 03 |
 | 6 | [`06-e2e-validation.md`](06-e2e-validation.md) | Go/No-Go checklist execution, full E2E CEO → Dev → pytest → Paperclip | ⬜ Pending | all |
 
 **MVP is declared complete only when every checkbox in

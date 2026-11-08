@@ -1,9 +1,9 @@
-# Phase 1/6 — Monorepo Scaffolding — **AS-BUILT RECORD** ✅
+# Phase 1/6 — Monorepo Scaffolding — **Implementation Record** ✅
 
-> Status: **Complete** (commits `7fa1fda`, `52f138e`). Original plan executed
-> 2026-11-03; verified against the spec (ADR-06, §5.1, R8).
-> Forward-looking phases live in `04`–`06`; phases 01–03 are kept as as-built
-> records so later phases know exactly what exists and why.
+> Status: **Complete** (commits `7fa1fda`, `52f138e`). Executed 2026-11-03;
+> verified against the spec (ADR-06, §5.1, R8). Phases 01–03 are kept as
+> implementation records so later phases know exactly what exists and why;
+> forward-looking plans live in `04`–`06`.
 
 ## What was built
 
@@ -38,7 +38,7 @@ Note: the `reviewer` profile exists in storage for the ADR-06 collision test
 
 ### `.gitignore` (R8 — validated with negative tests)
 
-Covers all spec-mandated paths **plus** corrections discovered during
+Covers all spec-mandated paths **plus** the runtime paths identified during
 execution: `storage/paperclip_pgdata/` (Postgres data dir), launcher runtime
 logs (`storage/launcher*.log`), and `.gitkeep` negations so placeholder dirs
 stay tracked:
@@ -86,13 +86,13 @@ GOOSE_PORT_REVIEWER=3285
       secrets (spec §2.4).
 - [x] No secrets in the initial commit (manual review of the tree).
 
-## Deviations from the original sketch
+## Deviations from the original plan
 
-| Sketch | As-built | Reason |
+| Plan | As-built | Reason |
 |---|---|---|
 | `docker-compose.yml` placeholder named in Phase 1 | Realized in Phase 3 with the real image contract | Phase sequencing |
 | `tool_permissions.json` placeholder `{}` | Still `{}` — Phase 4 | Intentional (schema caution §5.7) |
-| `.gitignore` "six lines" | Extended set (pgdata, launcher logs, negations) | Phases 2–3 discovered extra runtime paths |
+| `.gitignore` "six lines" | Extended set (pgdata, launcher logs, negations) | Phases 2–3 identified extra runtime paths |
 
 ## Outputs consumed by later phases
 

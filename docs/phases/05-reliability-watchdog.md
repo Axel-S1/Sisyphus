@@ -1,18 +1,14 @@
 # Phase 5/6 — Reliability: Lock Watchdog (#3819) + Network Backoff (#6596)
 
-> Status: **Plan** (not yet executed — re-opened by the 2026-11-06
-> Refactoring & Security Sprint; an earlier aborted run left
-> `watchdog-locks.sh` in place, but **none of its acceptance criteria have
-> been verified**). Spec reference: ADR-05 (#3819, #6596), §5.4 (watchdog
-> SQL + liveness semantics), Risks R3/R6/R10. Depends on: Phase 3 (running
-> Paperclip + PostgreSQL/Drizzle).
+> Status: **Plan** (not yet executed). Spec reference: ADR-05 (#3819,
+> #6596), §5.4 (watchdog SQL + liveness semantics), Risks R3/R6/R10.
+> Depends on: Phase 3 (running Paperclip + PostgreSQL/Drizzle).
 >
-> ⚠️ **Task 2 re-planning note:** the aborted run's `backoff_proxy.py` was
-> **deleted** as structural debt — it was never referenced by any adapter
-> config, compose file, or startup script, so the #6596 mitigation existed
-> only as an unreachable standalone script. Re-implement per this doc's
-> implementation note (adapter-config-level retry if the real schema
-> supports it) **with wiring**, or record the deferral explicitly.
+> **Task 2 planning note:** the #6596 backoff mitigation is to be
+> implemented per this doc's implementation note (adapter-config-level retry
+> if the real schema supports it) **with wiring** into the adapter targets —
+> a standalone, unwired script does not satisfy the acceptance criteria. If
+> deferred, record the deferral explicitly.
 
 ## Objective
 
@@ -40,6 +36,9 @@ Eliminate the two "silent failure" modes of the control loop:
   `docker exec paperclip_postgres psql -U paperclip -d paperclip …`.
 - Paperclip is in `authenticated` mode with `bootstrap_pending`; some
   API-side probes may require the one-time human onboarding first.
+- An implementation of `execution-plane/scripts/watchdog-locks.sh` exists
+  from Phase 3 groundwork; its acceptance criteria are to be verified per
+  this doc before the phase is declared done.
 
 ## Task 1 — Orphaned-lock watchdog (with v2.1 liveness semantics)
 

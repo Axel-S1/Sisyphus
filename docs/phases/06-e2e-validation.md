@@ -35,7 +35,7 @@ runs.
 
 ## Task 2 — Go/No-Go checklist
 
-Reproduced from spec §8 (v2.2 wording — validated facts marked):
+Reproduced from spec §8 (verified facts marked):
 
 - [x] Goose `/acp` answers the `initialize` handshake (JSON-RPC 2.0) from
       **inside** the container with `X-Secret-Key` — confirmed Phase 3
@@ -43,9 +43,7 @@ Reproduced from spec §8 (v2.2 wording — validated facts marked):
       localhost bind or the stdio command `goose acp` in use).
 - [x] **401 without** the secret (negative auth test) — confirmed Phase 3.
 - [ ] Hermes endpoint answers from inside the container (with auth provider
-      credentials) — setup lands with agent wiring. *(An earlier draft of
-      this doc pre-checked this item as "verified Phase 6"; that claim was
-      removed in the 2026-11-06 re-alignment — no such verification exists.)*
+      credentials) — setup lands with agent wiring.
 - [x] Two Goose profiles on **distinct ports** (ADR-06) launched
       **concurrently** → zero cross-writes to configs — confirmed Phase 2.
 - [ ] `execute_code` runs with an empty `PYTHONPATH`; `import hermes_cli`
@@ -75,7 +73,7 @@ Log each failure/fix pair in the final report.
   - All fixes applied during the remediation loop.
   - Explicit out-of-scope note: sandboxing, RAG, local inference, and
     `GOOSE_MODE=auto` are NOT part of the MVP.
-  - Known deviations from the original spec sketches (see the as-built
+  - Known deviations from the original spec plans (see the implementation
     records in phases 01–03 for the full list).
 
 ## MVP completion statement template

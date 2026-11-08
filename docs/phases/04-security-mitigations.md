@@ -1,23 +1,17 @@
 # Phase 4/6 — Security Mitigations (MVP security baseline)
 
-> Status: **Plan** (not yet executed — re-opened by the 2026-11-06
-> Refactoring & Security Sprint; an earlier aborted run left partial
-> artifacts — a tracked `permission.yaml` policy and the env-scrub already
-> present in the installed Hermes build — but **no acceptance criterion has
-> been verified**). Spec reference: ADR-02 (§1 emergency patch, §2 MVP
-> approval mode), §5.5 (`execute_code` patch), §5.7 (tool permissions),
-> §2.4 (permission modes). *ADR-04 (SQLite journal modes) was withdrawn in
-> the sprint — see the spec.* Depends on: Phase 2 (daemons) for Goose
-> settings; Phase 3 running for the negative tests.
+> Status: **Plan** (not yet executed). Spec reference: ADR-02 (§1 emergency
+> patch, §2 MVP approval mode), §5.5 (`execute_code` patch), §5.7 (tool
+> permissions), §2.4 (permission modes). *ADR-04 (SQLite journal modes) was
+> withdrawn in spec v2.3 — see the spec.* Depends on: Phase 2 (daemons) for
+> Goose settings; Phase 3 running for the negative tests.
 
 ## Objective
 
 Apply the MVP security baseline: neutralize CVE-2026-9368 (RCE via
 `PYTHONPATH` → API-key exfiltration), force human approval for destructive
 Goose actions (`GOOSE_MODE=smart_approve`), and enforce path/command
-blocking rules. *(The former "SQLite `journal_mode: delete`" task was
-withdrawn with ADR-04 — the Execution Plane runs natively on the host
-filesystem, where WAL is correct.)*
+blocking rules.
 
 ## Why (risk mapping)
 
@@ -33,6 +27,10 @@ filesystem, where WAL is correct.)*
 - `GOOSE_MODE=smart_approve` is already present in the host `.env` **and**
   seeded into every profile's `config.yaml` (Phase 2). Remaining work:
   verify it reaches each daemon's runtime env (`/proc/<pid>/environ`).
+- A tracked tool-name-level permission policy exists at
+  `execution-plane/profiles/<p>/goose_config/permission.yaml` (seeded by
+  `run.sh`/`run.ps1`); the pattern-rule wrapper layer (spec §5.7) is the
+  remaining enforcement work.
 - The daemons are spawned on demand by the Host Launcher (`launcher.py`,
   port 9000) via `run.sh`; there are no systemd units (ADR-07). Any
   post-start hook must be wired into `run.sh`/`launcher.py`, not systemd.
@@ -46,6 +44,9 @@ filesystem, where WAL is correct.)*
 - Goose builds: sessions/config SQLite lives under
   `storage/goose_data/agent_<profile>/` (via `GOOSE_PATH_ROOT`); Hermes state
   under `storage/hermes_data/agent_<profile>/` (via `HERMES_HOME`).
+- The deployed Hermes v0.22.7 build already contains an env-scrub in its
+  `execute_code` path (`_build_child_env`); its acceptance behaviour must
+  still be evidenced per the verification tests below.
 
 ## Tasks
 

@@ -2,7 +2,7 @@
 
 Progress tracker for the 6-phase MVP plan — see
 [`docs/phases/README.md`](docs/phases/README.md) and the architecture spec
-[`docs/spec/architecture-spec.md`](docs/spec/architecture-spec.md) (v2.3).
+[`docs/spec/architecture-spec.md`](docs/spec/architecture-spec.md) (v2.4).
 
 | # | Phase | Status |
 |---|-------|--------|

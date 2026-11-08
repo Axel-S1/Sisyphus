@@ -61,7 +61,7 @@ Sisyphus/
 ├── STATUS.md                         # Progress tracker
 ├── start.sh / stop.sh                # One-button stack lifecycle
 ├── docs/
-│   ├── spec/architecture-spec.md     # Authoritative architecture spec (v2.3)
+│   ├── spec/architecture-spec.md     # Authoritative architecture spec (v2.4)
 │   └── phases/                       # 6-phase execution plan (1–3 done)
 ├── control-plane/paperclip/config/
 │   ├── adapters.json                 # Network-only adapter contract
@@ -247,7 +247,7 @@ sudo ufw allow in on docker0
 | Document | Description |
 |----------|-------------|
 | [STATUS.md](STATUS.md) | Current progress tracker |
-| [docs/spec/architecture-spec.md](docs/spec/architecture-spec.md) | Authoritative architecture specification (v2.3) |
+| [docs/spec/architecture-spec.md](docs/spec/architecture-spec.md) | Authoritative architecture specification (v2.4) |
 | [docs/phases/README.md](docs/phases/README.md) | 6-phase execution plan index |
 | [docs/phases/01-monorepo-scaffolding.md](docs/phases/01-monorepo-scaffolding.md) | Phase 1: Repo structure, gitignore, env templates |
 | [docs/phases/02-execution-plane-daemons.md](docs/phases/02-execution-plane-daemons.md) | Phase 2: run.sh, profiles, collision test |
@@ -360,4 +360,4 @@ This is a phased, specification-driven project. See [docs/phases/README.md](docs
 
 ---
 
-*Generated from architecture-spec.md v2.3 — see [STATUS.md](STATUS.md) for current phase status.*
+*Generated from architecture-spec.md v2.4 — see [STATUS.md](STATUS.md) for current phase status.*

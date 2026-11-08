@@ -4,7 +4,7 @@ Local-first multi-agent system (Paperclip · Hermes · Goose).
 
 | Document | Purpose |
 |---|---|
-| [`spec/architecture-spec.md`](spec/architecture-spec.md) | **Source of truth.** Architecture spec v2.2 (post-audit, implementation-verified). ADRs, risks, Go/No-Go checklist. Settled decisions live here — phase docs must not contradict it. |
+| [`spec/architecture-spec.md`](spec/architecture-spec.md) | **Source of truth.** Architecture spec v2.4. ADRs, risks, Go/No-Go checklist. Settled decisions live here — phase docs must not contradict it. |
 | [`phases/README.md`](phases/README.md) | Execution plan: the six sub-phases that deliver the MVP, their order, dependencies, and current status. |
 | [`phases/01…06-*.md`](phases/) | One document per phase. Completed phases are written as **as-built records** (what was built, verification evidence, deviations). Pending phases are **forward-looking plans** (tasks, acceptance criteria). |
 | [`../STATUS.md`](../STATUS.md) | Progress tracker: phase status, verified facts, blockers. |
