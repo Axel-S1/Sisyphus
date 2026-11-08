@@ -5,9 +5,11 @@
 > v2.2 incorporated the corrections established while executing Phases 1–3
 > against the installed components (Hermes v0.22.7, Goose 1.56.0, Paperclip
 > `ghcr.io/paperclipai/paperclip:latest`). v2.3 consolidates the
-> specification against the verified implementation state. ADR **decisions**
-> are settled — except **ADR-04, withdrawn in v2.3** (its premise does not
-> apply to this architecture).
+> specification against the verified implementation state. v2.4 adds
+> **ADR-08 (Multi-Machine State Sync)**; the 2026-11-08 amendment records its
+> clean-slate E2E validation and the export-side FK-repair integration.
+> ADR **decisions** are settled — except **ADR-04, withdrawn in v2.3** (its
+> premise does not apply to this architecture).
 > **Feasibility score: v1 = 4/10 → v2 target = 8/10** (Phases 1–3 complete and
 > verified; conditional on Phases 4–6).
 
@@ -25,6 +27,36 @@ plaintext-secret tables (`company_secrets`, `company_secret_versions`,
 `.sql.gz` auto-backups (which contain plaintext secrets) are **hard-excluded**
 from the private repo. Implementation: `execution-plane/scripts/setup-sync.sh` /
 `sync-export.sh` / `sync-import.sh`.
+
+**v2.4 amendment (2026-11-08 — clean-slate E2E validation)** — the ADR-08
+tooling was proven by a full purge-and-rebirth cycle: stack stopped, `storage/`
+and `execution-plane/workspace/` wiped to `.gitkeep` scaffolding (including a
+root-owned PostgreSQL data dir), fresh pgdata volume, restore from the private
+repo, connectivity suite green. Three defects were found and fixed in the
+pipeline:
+
+1. **FK-dangling dump rows (export side)**: `--exclude-table-data` keeps the
+   secret tables' *schema* but leaves rows in referencing tables
+   (`company_secret_bindings`, `secret_access_events`, …) pointing at secret
+   ids that no longer exist → the restore aborted on an FK violation.
+   Fix: the FK-repair logic (`repair-dump.py`) now runs **inside
+   `sync-export.sh`**, after sanitization and **before** the checksum, so the
+   dump committed to the private repo is import-ready by construction. The
+   repair emulates the dump's own FK actions: `CASCADE` → drop the row,
+   `SET NULL` / `RESTRICT` / `NO ACTION` → null the column.
+2. **`drizzle` schema survived the import wipe**: `sync-import.sh` dropped
+   `public` only; the `drizzle` migration-bookkeeping schema from a previous
+   restore then collided with the dump's `CREATE SCHEMA drizzle`. Fix: the
+   import now drops **both** `public` and `drizzle`.
+3. **Cosmetic**: the dump-date probe passed `-- Dumped…` to `grep` as an
+   option → now `grep -e`.
+
+Validation evidence: purge → `setup-sync.sh` (adopted the existing private
+repo, rebuilt symlinks) → `start.sh` → `sync-import.sh --yes` (checksum +
+leak scan passed; users=3, companies=2 restored) →
+`test_container_connectivity.sh` all green (container→host gateway, ACP
+handshakes on both Goose profiles, 401 negative tests, clean teardown).
+As-built record: `docs/phases/07-state-sync-adr08.md`.
 
 **v2.0 → v2.1** — Goose HTTP server is `goose serve` (not `goose acp`, stdio-only); `GOOSE_SERVER__SECRET_KEY` auth; ADR-06 profile→port registry; watchdog mark-`failed` semantics; `storage/goose_data/**` added to `.gitignore`.
 
@@ -325,11 +357,17 @@ Three measures, **all mandatory and complementary**:
     `storage/` symlinks — zero manual Git or link work for new clones
     (DX requirement).
   - `sync-export.sh` produces: sanitized `paperclip-backup.sql` (pg_dump with
-    the five plaintext-secret tables excluded) and verifies no blocked files
-    are staged before commit.
-  - `sync-import.sh` restores the sanitized dump, verifies checksums, and
-    aborts on dirty state or a running Paperclip container. Provider/agent
-    keys must be re-entered after import (only the excluded tables).
+    the five plaintext-secret tables excluded), **FK-repaired in the export
+    pipeline** via `repair-dump.py` (emulates the dump's own FK actions on
+    rows referencing excluded tables — `CASCADE` drops the row,
+    `SET NULL`/`RESTRICT` nulls the column — so the committed dump is
+    import-ready by construction), and verifies no blocked files are staged
+    before commit.
+  - `sync-import.sh` restores the sanitized dump, verifies checksums,
+    re-verifies sanitization, drops **both** the `public` and `drizzle`
+    schemas before restoring, and aborts on dirty state or a running
+    Paperclip container. Provider/agent keys must be re-entered after import
+    (only the excluded tables).
   - If secret-bearing content (plaintext keys, `*.sql.gz` backups) is ever
     found in the private repo's Git history: treat as a leak (R8) — rotate
     provider keys and agent API keys immediately; rotate
@@ -351,6 +389,7 @@ The MVP is decomposed into six sub-phases executed by the repo's phase docs
 | 1 | Monorepo scaffolding, `.gitignore`, env templates | ✅ Complete (verified) |
 | 2 | Execution plane daemons (`run.sh`, profiles, collision test) | ✅ Complete (verified) |
 | 3 | Control plane (Paperclip + PostgreSQL), launcher, connectivity tests | ✅ Complete (verified; human bootstrap pending) |
+| + | **State synchronization (ADR-08 addendum, executed out of sequence)** | ✅ Complete (verified — clean-slate E2E, 2026-11-08; see `docs/phases/07-state-sync-adr08.md`) |
 | 4 | Security mitigations (CVE patch, smart_approve, permission rules) | ⬜ Pending |
 | 5 | Reliability (orphaned-lock watchdog, network backoff) | ⬜ Pending |
 | 6 | E2E validation & Go/No-Go | ⬜ Pending |
@@ -372,6 +411,7 @@ Sisyphus/
 ├── .env.example                      # secrets template (real .env git-ignored, R8)
 ├── .gitignore                        # R8 mandatory lines + hygiene
 ├── docker-compose.yml                # real Paperclip image + PostgreSQL 16
+├── start.sh / stop.sh                # one-button stack lifecycle (repo root)
 ├── STATUS.md                         # progress tracker
 ├── docs/
 │   ├── README.md                     # documentation index
@@ -384,9 +424,15 @@ Sisyphus/
 │   ├── scripts/
 │   │   ├── run.sh / run.ps1          # bootstrap wrappers (ADR-03/06)
 │   │   ├── launcher.py               # Host Launcher Micro-API (ADR-07)
-│   │   ├── start.sh / stop.sh        # one-button startup/teardown
 │   │   ├── ports.env.example         # ADR-06 registry template
-│   │   └── test_container_connectivity.sh  # atomic Phase 3 test suite
+│   │   ├── setup-sync.sh             # ADR-08 private-repo scaffold + symlinks
+│   │   ├── sync-export.sh            # ADR-08 sanitized + FK-repaired dump export
+│   │   ├── sync-import.sh            # ADR-08 gated, checksummed restore
+│   │   ├── repair-dump.py            # ADR-08 FK-action repair of sanitized dumps
+│   │   ├── watchdog-locks.sh         # orphaned-lock purge (Phase 5, #3819)
+│   │   ├── test_container_connectivity.sh  # atomic Phase 3 test suite
+│   │   ├── test_watchdog_locks.sh    # watchdog acceptance harness (Phase 5)
+│   │   └── test_security_baseline.sh # security acceptance harness (Phase 4)
 │   ├── profiles/
 │   │   ├── ceo/hermes_config/        # SOUL.md, AGENTS.md
 │   │   ├── dev/goose_config/         # config.yaml (smart_approve)
@@ -394,9 +440,11 @@ Sisyphus/
 │   └── workspace/                    # agent deliverables
 └── storage/
     ├── paperclip_data/               # Paperclip state (bind mount)
-    ├── paperclip_pgdata/             # PostgreSQL data dir (git-ignored)
-    ├── hermes_data/agent_*/          # HERMES_HOME per profile
-    └── goose_data/agent_*/           # GOOSE_PATH_ROOT per profile
+    ├── paperclip_pgdata/             # PostgreSQL data dir (git-ignored; regenerable)
+    ├── hermes_data/agent_*/          # HERMES_HOME per profile (memories + MEMORY.md
+    │                                 #   symlinked into ~/sisyphus-state/, ADR-08)
+    └── goose_data/agent_*/           # GOOSE_PATH_ROOT per profile (config symlinked
+                                      #   into ~/sisyphus-state/, ADR-08)
 ```
 
 Mandatory `.gitignore` (R8 — v2.3: Hermes state ignored **wholesale**,
@@ -582,6 +630,7 @@ equivalent — no pwsh on the reference host, so flagged as untested).
 | R9 | Wrong command / localhost bind → daemon unreachable from container | High | `goose serve`/`hermes serve` + `--host 0.0.0.0` + in-container curl tests | ✅ Verified Phase 3 |
 | R10 | Watchdog kills legitimate long runs | High | Liveness check on activity, mark-`failed`-first | Phase 5 |
 | R11 | Host Launcher failure / port collision (:9000) | Medium | Fallback to direct `run.sh` execution; port from `ports.env` | Designed; Phase 6 verifies |
+| R12 | Sanitized SQL dump unimportable (FK-dangling rows vs excluded secret tables); `drizzle` schema collision on re-import | High | **Export-side** FK repair (`repair-dump.py` inside `sync-export.sh`, pre-checksum) + import drops both `public` and `drizzle` schemas | ✅ Fixed & validated (clean-slate E2E, 2026-11-08) |
 
 ---
 
@@ -592,7 +641,13 @@ procedures live in `docs/phases/06-e2e-validation.md`.
 
 - [x] Container→host connectivity: goose `/acp` answers `initialize` from
       **inside** the container with `X-Secret-Key`; **401 without**.
-      (Validated Phase 3, goose 1.56.0.)
+      (Validated Phase 3, goose 1.56.0; **re-validated in the 2026-11-08
+      clean-slate cycle**.)
+- [x] Multi-machine state-sync round-trip (ADR-08): wipe `storage/` to
+      `.gitkeep` scaffolding → `setup-sync.sh` → `start.sh` (fresh pgdata) →
+      `sync-import.sh --yes` (users=3, companies=2 restored) → connectivity
+      suite green. (Clean-slate E2E, 2026-11-08 — see
+      `docs/phases/07-state-sync-adr08.md`.)
 - [ ] Hermes `:8642` answers from inside the container with valid auth
       (Hermes auth provider — setup lands with agent wiring).
 - [x] Two Goose profiles on distinct ports (ADR-06), launched **concurrently**,

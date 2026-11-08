@@ -106,6 +106,22 @@ if [[ "$DUMP_DONE" == 1 ]]; then
   leak="$(grep -E '^COPY (public\.)?(company_secrets|company_secret_versions|agent_api_keys|ai_connection_pools|user_secret_definitions) ' "$DUMP" || true)"
   [[ -z "$leak" ]] || die "dump contains rows of a secret table — refusing to export. Investigate before proceeding."
   ok "dump is sanitized (no secret-table rows)"
+
+  # ── FK-dependency repair (R8 §5): make the dump import-ready ──────────────
+  # --exclude-table-data keeps the secret tables' SCHEMA but leaves rows in
+  # referencing tables (company_secret_bindings, secret_access_events, ...)
+  # pointing at secret ids that no longer exist → FK violations on import.
+  # repair-dump.py parses the dump's own FK graph and emulates the FK actions:
+  #   ON DELETE CASCADE    → drop the referencing row
+  #   ON DELETE SET NULL   → null the column
+  #   RESTRICT / NO ACTION → null the column (documented deviation)
+  if command -v python3 >/dev/null 2>&1; then
+    python3 "$SCRIPT_DIR/repair-dump.py" "$DUMP"
+  else
+    die "python3 not found — cannot FK-repair the dump; refusing to export an unimportable dump."
+  fi
+  ok "dump FK-repaired (guaranteed import-ready)"
+
   ( cd "$EXPORTS" && sha256sum "$(basename "$DUMP")" > "$(basename "$DUMP").sha256" )
   ok "checksum written: $DUMP.sha256"
   rm -f "$EXPORTS/paperclip-backup.sql.tmp" 2>/dev/null || true

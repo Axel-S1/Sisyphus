@@ -71,7 +71,14 @@ Sisyphus/
 │   │   ├── run.sh / run.ps1          # Bootstrap wrappers (symmetric env injection)
 │   │   ├── launcher.py               # Host Launcher Micro-API (ADR-07)
 │   │   ├── ports.env.example         # Port registry template (ADR-06)
-│   │   └── test_container_connectivity.sh  # Atomic Phase 3 test suite
+│   │   ├── setup-sync.sh             # ADR-08: private-repo scaffold + symlinks
+│   │   ├── sync-export.sh            # ADR-08: sanitized + FK-repaired dump
+│   │   ├── sync-import.sh            # ADR-08: gated, checksummed restore
+│   │   ├── repair-dump.py            # ADR-08: FK-action repair of sanitized dumps
+│   │   ├── watchdog-locks.sh         # Orphaned-lock purge (Phase 5, #3819)
+│   │   ├── test_container_connectivity.sh  # Atomic Phase 3 test suite
+│   │   ├── test_watchdog_locks.sh    # Watchdog acceptance harness (Phase 5)
+│   │   └── test_security_baseline.sh # Security acceptance harness (Phase 4)
 │   ├── profiles/
 │   │   ├── ceo/hermes_config/        # SOUL.md, AGENTS.md
 │   │   ├── dev/goose_config/         # config.yaml (smart_approve)
@@ -91,10 +98,30 @@ Sisyphus/
 ### Prerequisites
 
 - **Docker** + Docker Compose plugin (or standalone `docker-compose`)
-- **Python 3.10+** (for `launcher.py`)
+- **Python 3.10+** (for `launcher.py` and `repair-dump.py`)
 - **Goose 1.56.0+** installed and on `PATH` (`goose serve` command)
 - **Hermes v0.22.7+** installed and on `PATH` (`hermes serve` command)
 - **Linux** (reference host; macOS/WSL2 supported with firewall adjustments)
+
+### 0. Migrating an existing machine's state (ADR-08)
+
+If you already have a private state repo (e.g., cloned from your remote into
+`~/sisyphus-state/`), restore your identity before first boot:
+
+```bash
+git clone git@github.com:YOU/sisyphus-state.git ~/sisyphus-state   # private repo
+./execution-plane/scripts/setup-sync.sh        # adopts it, rebuilds symlinks
+./start.sh                                     # launcher + Paperclip + fresh PostgreSQL
+docker compose stop paperclip                  # import gate: Paperclip must be DOWN
+./execution-plane/scripts/sync-import.sh       # restores the DB (checksummed, gated)
+docker compose up -d paperclip                 # control plane back up
+```
+
+Re-enter provider/agent API keys in the Paperclip UI afterwards — plaintext
+secret tables are excluded from dumps by design (R8). Logins survive.
+
+For a brand-new installation (no prior state), skip this section and follow
+steps 1–6 below.
 
 ### 1. Clone & Configure
 
@@ -213,16 +240,30 @@ lives in a **private** Git repo at `~/sisyphus-state/` (created automatically;
 ephemeral SQLite DBs and secrets never sync — see ADR-08 in the spec).
 
 ```bash
-# One-time, per machine (zero-friction setup):
-./execution-plane/scripts/setup-sync.sh        # scaffold + git init + symlinks
+# One-time, per machine (zero-friction setup; idempotent):
+./execution-plane/scripts/setup-sync.sh        # scaffold/adopt repo + symlinks
 
 # Leaving machine A:
-./execution-plane/scripts/sync-export.sh       # sanitized pg_dump + commit/push
+./execution-plane/scripts/sync-export.sh       # sanitized + FK-repaired dump, commit/push
 
 # Arriving on machine B:
 git -C ~/sisyphus-state pull
-./execution-plane/scripts/sync-import.sh       # restore dump (paperclip must be stopped)
+./execution-plane/scripts/sync-import.sh       # restore dump (Paperclip must be DOWN; postgres UP)
 ```
+
+> **Import ordering tip**: `./start.sh` brings up Paperclip **and** Postgres,
+> but `sync-import.sh` requires Paperclip to be **down** (it drops and
+> recreates the schema). On machine B after `start.sh`, run
+> `docker compose stop paperclip` before `sync-import.sh`, then
+> `docker compose up -d paperclip` afterwards — `sync-import.sh` enforces
+> these gates and will refuse an unsafe restore.
+
+The export pipeline **guarantees an import-ready dump**: after the sanitized
+`pg_dump`, `repair-dump.py` emulates the schema's own FK actions on rows that
+reference the excluded secret tables (CASCADE → drop, SET NULL/RESTRICT →
+nullify), so the committed `.sql` never contains FK-dangling rows
+(verified by the 2026-11-08 clean-slate E2E — see
+[docs/phases/07-state-sync-adr08.md](docs/phases/07-state-sync-adr08.md)).
 
 Rules of thumb: export before you switch machines, import after you arrive,
 and never run agents on two machines against the same identity at once
@@ -255,6 +296,7 @@ sudo ufw allow in on docker0
 | [docs/phases/04-security-mitigations.md](docs/phases/04-security-mitigations.md) | Phase 4: CVE patch, smart_approve, permission rules |
 | [docs/phases/05-reliability-watchdog.md](docs/phases/05-reliability-watchdog.md) | Phase 5: Orphaned-lock watchdog, exponential backoff |
 | [docs/phases/06-e2e-validation.md](docs/phases/06-e2e-validation.md) | Phase 6: Go/No-Go checklist |
+| [docs/phases/07-state-sync-adr08.md](docs/phases/07-state-sync-adr08.md) | **ADR-08 addendum**: multi-machine state sync + clean-slate E2E validation (as-built) |
 
 ---
 
@@ -264,7 +306,13 @@ sudo ufw allow in on docker0
 
 ```bash
 ./execution-plane/scripts/test_container_connectivity.sh
+cat /tmp/phase3_conn_test.log    # the script is self-quieting — results land here
 ```
+
+> **Note (DX)**: the script redirects all of its output to
+> `/tmp/phase3_conn_test.log`. An empty terminal after the run does **not**
+> mean it failed — read the log, or check for the final
+> `=== TEST BLOCK COMPLETE ===` marker.
 
 Validates:
 - Goose Dev ACP handshake (`initialize` + `X-Secret-Key`) from inside container ✅
