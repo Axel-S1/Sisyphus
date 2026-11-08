@@ -18,7 +18,8 @@
 ## Changelog
 
 **v2.3 → v2.4 (2026-11-08)** — Added **ADR-08 (State Synchronization Strategy)**:
-multi-machine state sync via a private Git repository rooted at `~/sisyphus-state/`
+multi-machine state sync via a private Git repository (default
+`~/sisyphus-state/`, relocated to `~/Projects/sisyphus-state/` on 2026-11-08)
 (text-only: configs, memories, sanitized SQL dumps), with ephemeral SQLite state
 declared explicitly non-synced. The sanitized dump **keeps the `account` table**
 (hashed passwords — preserves logins across machines) and excludes only
@@ -297,8 +298,10 @@ Three measures, **all mandatory and complementary**:
 ### ADR-08 — State Synchronization Strategy (Multi-Machine, Async)
 
 - **Decision**: state that must survive machine-to-machine movement is
-  synchronized asynchronously through a **private Git repository rooted at
-  `~/sisyphus-state/`** (path configurable), which is **entirely separate from
+  synchronized asynchronously through a **private Git repository** — default
+  location `~/sisyphus-state/`, configurable via `SISYPHUS_STATE_DIR` or
+  `setup-sync.sh <path>` (the deployed instance lives at
+  `~/Projects/sisyphus-state/`) — which is **entirely separate from
   the public Sisyphus monorepo**. The public repo stays neutral: no state, no
   secrets, no binary artifacts. The private repo is populated exclusively by
   tooling (`setup-sync.sh`, `sync-export.sh`, `sync-import.sh`), never by hand.
@@ -351,6 +354,16 @@ Three measures, **all mandatory and complementary**:
   export before switching machines, import after arriving.
 
 - **Consequences**:
+  - **Location resolution** (all three scripts): `argv[1]` and
+    `SISYPHUS_STATE_DIR` override the `~/sisyphus-state/` default;
+    `sync-export.sh`/`sync-import.sh` additionally discover the repo by
+    walking up from the `storage/` symlinks, so a non-default location (the
+    deployed instance: `~/Projects/sisyphus-state/`) works without env vars
+    once the links exist. The `storage/` symlinks are **absolute**, so any
+    relocation requires re-running `setup-sync.sh` (with the new path) to
+    rebuild them. `sisyphus-repo.path` inside the private repo records the
+    *companion checkout* (the Sisyphus repo), not the state repo's own
+    location — moving the state repo changes nothing inside it.
   - `setup-sync.sh` scaffolds `~/sisyphus-state/`, `git init`s it, seeds a
     `.gitignore` that hard-blocks `*.db`, `*.db-*`, `*.sqlite*`, `*.sql.gz`,
     `backups/`, secrets files, and `paperclip_pgdata/`, and creates the
@@ -442,9 +455,11 @@ Sisyphus/
     ├── paperclip_data/               # Paperclip state (bind mount)
     ├── paperclip_pgdata/             # PostgreSQL data dir (git-ignored; regenerable)
     ├── hermes_data/agent_*/          # HERMES_HOME per profile (memories + MEMORY.md
-    │                                 #   symlinked into ~/sisyphus-state/, ADR-08)
+    │                                 #   symlinked into the private sisyphus-state
+    │                                 #   repo — default ~/sisyphus-state/, deployed
+    │                                 #   ~/Projects/sisyphus-state/ — ADR-08)
     └── goose_data/agent_*/           # GOOSE_PATH_ROOT per profile (config symlinked
-                                      #   into ~/sisyphus-state/, ADR-08)
+                                      #   into the private sisyphus-state repo, ADR-08)
 ```
 
 Mandatory `.gitignore` (R8 — v2.3: Hermes state ignored **wholesale**,

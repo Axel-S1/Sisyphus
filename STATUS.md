@@ -48,10 +48,11 @@ Progress tracker for the 6-phase MVP plan — see
   clean teardown via launcher endpoints.
 
 ### ADR-08 addendum — Multi-machine state sync (2026-11-08, as-built record: [`docs/phases/07-state-sync-adr08.md`](docs/phases/07-state-sync-adr08.md))
-- **`setup-sync.sh`** — scaffolds/adopts the private repo at
-  `~/sisyphus-state/`, seeds the strict `.gitignore` (SQLite, `*.sql.gz`,
+- **`setup-sync.sh`** — scaffolds/adopts the private repo (default
+  `~/sisyphus-state/`; this deployment: `~/Projects/sisyphus-state/` via
+  `SISYPHUS_STATE_DIR`), seeds the strict `.gitignore` (SQLite, `*.sql.gz`,
   `backups/`, pgdata, secrets), migrates text state, creates the
-  `storage/ → ~/sisyphus-state/` symlinks (memories, MEMORY.md, goose
+  `storage/ → <state-repo>/` symlinks (memories, MEMORY.md, goose
   configs). Idempotent; safe to re-run on every machine.
 - **`sync-export.sh`** — sanitized `pg_dump` (keeps hashed `account`,
   excludes the five plaintext-secret tables) → **FK-repair in the export
@@ -71,6 +72,13 @@ Progress tracker for the 6-phase MVP plan — see
   fixed during the cycle: FK-dangling dump rows (→ export-side repair), the
   `drizzle` schema surviving the import wipe, and a `grep` option-parsing
   bug. Private repo commit `0af12f1`; re-export `e855563`.
+- **State-repo relocation (2026-11-08)** — the private repo was moved from
+  the default `~/sisyphus-state/` to **`~/Projects/sisyphus-state/`**
+  (non-default). All `storage/` symlinks (absolute paths) were rebuilt via
+  `SISYPHUS_STATE_DIR=~/Projects/sisyphus-state ./execution-plane/scripts/setup-sync.sh`;
+  script auto-discovery verified against the new location. Operators should
+  `export SISYPHUS_STATE_DIR="$HOME/Projects/sisyphus-state"` in the shell
+  profile so discovery survives a future `storage/` purge.
 
 ## Verified facts (validated against installed builds)
 

@@ -47,7 +47,7 @@ A monorepo implementing a resilient, local-first multi-agent architecture where 
 | **ADR-05** | Paperclip mitigations: `sessionKeyStrategy: 'run'` + orphaned-lock watchdog + backoff |
 | **ADR-06** | **Per-profile port registry** (`ports.env`) — one port per profile |
 | **ADR-07** | **Host Launcher Micro-API** (`launcher.py` :9000) — on-demand spawn, 10-min idle teardown |
-| **ADR-08** | **State Synchronization** — private Git repo at `~/sisyphus-state/` (text configs + sanitized SQL dumps); ephemeral SQLite and secrets never sync |
+| **ADR-08** | **State Synchronization** — private Git repo (default `~/sisyphus-state/`; deployed: `~/Projects/sisyphus-state/` via `SISYPHUS_STATE_DIR`) holding text configs + sanitized SQL dumps; ephemeral SQLite and secrets never sync |
 
 ---
 
@@ -105,11 +105,15 @@ Sisyphus/
 
 ### 0. Migrating an existing machine's state (ADR-08)
 
-If you already have a private state repo (e.g., cloned from your remote into
-`~/sisyphus-state/`), restore your identity before first boot:
+If you already have a private state repo, restore your identity before first
+boot. Clone it wherever you like — the scripts auto-discover it via the
+`storage/` symlinks — but **keep the location stable** and export
+`SISYPHUS_STATE_DIR` if it is not the default `~/sisyphus-state/` (this
+deployment uses `~/Projects/sisyphus-state/`):
 
 ```bash
-git clone git@github.com:YOU/sisyphus-state.git ~/sisyphus-state   # private repo
+git clone git@github.com:YOU/sisyphus-state.git ~/Projects/sisyphus-state
+export SISYPHUS_STATE_DIR="$HOME/Projects/sisyphus-state"   # in ~/.bashrc, if non-default
 ./execution-plane/scripts/setup-sync.sh        # adopts it, rebuilds symlinks
 ./start.sh                                     # launcher + Paperclip + fresh PostgreSQL
 docker compose stop paperclip                  # import gate: Paperclip must be DOWN
@@ -232,22 +236,43 @@ GOOSE_PORT_REVIEWER=3285
 
 One port per profile — **two profiles on one port = guaranteed crash-loop** (ADR-06).
 
-### Multi-Machine State Sync (`~/sisyphus-state/`, ADR-08)
+### Multi-Machine State Sync (private `sisyphus-state` repo, ADR-08)
 
 The public repo is state-neutral. Your *portable* state — agent personas,
 engine configs, Hermes memories, and a **sanitized** Paperclip SQL dump —
-lives in a **private** Git repo at `~/sisyphus-state/` (created automatically;
-ephemeral SQLite DBs and secrets never sync — see ADR-08 in the spec).
+lives in a **private** Git repo, entirely separate from the public repo.
+Ephemeral SQLite DBs and secrets never sync (see ADR-08 in the spec).
+
+**Where the repo lives — resolution order:**
+
+1. `argv[1]`: `./execution-plane/scripts/setup-sync.sh /any/path`
+2. `SISYPHUS_STATE_DIR` environment variable
+3. Default: `~/sisyphus-state/`
+4. Runtime fallback: `sync-export.sh`/`sync-import.sh` also discover the repo
+   by walking up from the `storage/` symlinks — so a non-default location
+   works without env vars once the links exist.
+
+> **This deployment uses `~/Projects/sisyphus-state/`.** Set it once in your
+> shell profile so discovery survives even a purged workspace:
+>
+> ```bash
+> export SISYPHUS_STATE_DIR="$HOME/Projects/sisyphus-state"
+> ```
+
+**Moving or relocating the repo**: the `storage/` symlinks are absolute, so
+after any move re-run
+`SISYPHUS_STATE_DIR=<new-path> ./execution-plane/scripts/setup-sync.sh` — it
+detects stale links and rebuilds them (never edit them by hand).
 
 ```bash
-# One-time, per machine (zero-friction setup; idempotent):
-./execution-plane/scripts/setup-sync.sh        # scaffold/adopt repo + symlinks
+# One-time, per machine (idempotent; adopts an existing repo, never clobbers):
+./execution-plane/scripts/setup-sync.sh        # or: setup-sync.sh ~/Projects/sisyphus-state
 
 # Leaving machine A:
 ./execution-plane/scripts/sync-export.sh       # sanitized + FK-repaired dump, commit/push
 
 # Arriving on machine B:
-git -C ~/sisyphus-state pull
+git -C "$SISYPHUS_STATE_DIR" pull
 ./execution-plane/scripts/sync-import.sh       # restore dump (Paperclip must be DOWN; postgres UP)
 ```
 

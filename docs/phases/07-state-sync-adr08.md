@@ -111,6 +111,24 @@ that guarantees both.
 | `paperclip_pgdata/` wiped by user-level commands only | Required `sudo` (container-owned `999:root` dir) | Documented expectation for operators running the purge |
 | `find … ! -name .gitkeep -exec rm -rf` keeps `.gitkeep` | It doesn't (rm -rf on the parent dir removes them) | Recovered via `git checkout -- storage/`; the purge procedure now documents `git checkout -- storage/` as the last step |
 
+### State-repo location (update, 2026-11-08)
+
+The private repo was **moved** from the default `~/sisyphus-state/` to
+`~/Projects/sisyphus-state/` after validation. How the location is managed:
+
+- **Resolution order** (all three sync scripts): `argv[1]` >
+  `SISYPHUS_STATE_DIR` env > default `~/sisyphus-state/` > runtime discovery
+  (walk up from a `storage/` symlink to the enclosing `.git`).
+- `storage/` symlinks are **absolute** → a move requires re-running
+  `SISYPHUS_STATE_DIR=<path> ./execution-plane/scripts/setup-sync.sh`, which
+  detects stale links and relinks them (verified during the move).
+- The private repo's `sisyphus-repo.path` records the *companion checkout*
+  (the Sisyphus repo), not the state repo's own location — moving the state
+  repo changes nothing inside it.
+- **Operator practice**: set
+  `export SISYPHUS_STATE_DIR="$HOME/Projects/sisyphus-state"` in the shell
+  profile so discovery never depends on the (regenerable) `storage/` links.
+
 ## Outputs consumed by later phases
 
 - Phase 4/5/6 assume the stack can be rebuilt from scratch at any time —
