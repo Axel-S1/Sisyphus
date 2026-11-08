@@ -2,28 +2,16 @@
 
 Progress tracker for the 6-phase MVP plan — see
 [`docs/phases/README.md`](docs/phases/README.md) and the architecture spec
-[`docs/spec/architecture-spec.md`](docs/spec/architecture-spec.md) (v2.3,
-post-sprint re-alignment).
+[`docs/spec/architecture-spec.md`](docs/spec/architecture-spec.md) (v2.3).
 
 | # | Phase | Status |
 |---|-------|--------|
 | 1 | Monorepo scaffolding | ✅ Done (`7fa1fda`, `52f138e`) |
 | 2 | Execution plane daemons | ✅ Done (`d3c0c0a`, `1cc513a`) |
 | 3 | Control plane (Paperclip) | ✅ Done (`c3224d2`, `67aba3f`, `de6a38a`) |
-| 4 | Security mitigations | ⬜ **Pending** (re-opened — see sprint note) |
-| 5 | Reliability watchdog | ⬜ **Pending** (re-opened — see sprint note) |
+| 4 | Security mitigations | ⬜ Pending |
+| 5 | Reliability watchdog | ⬜ Pending |
 | 6 | E2E validation & Go/No-Go | ⬜ Pending |
-
-> **Refactoring & Security Sprint (2026-11-06):** Phases 4 and 5 were found
-> to be recorded as "done" with verification claims that could not be
-> substantiated (fake `[x]` checklist items dated to a not-yet-executed
-> Phase 6; a `hermes gateway` draft in `run.sh` contradicting the spec's
-> verified `hermes serve` fact; an enforced-but-untracked permission policy).
-> Both phases were **downgraded back to Pending**. Structural debt was
-> removed: `ensure-sqlite-modes.sh` and `backoff_proxy.py` deleted (ADR-04
-> withdrawn — see spec), launcher topology corrected, secrets-hygiene ignore
-> gap closed, permission policy made tracked and self-consistent. Phase docs
-> 04–06 are plans again; do **not** treat their artifacts as verified.
 
 ## What is done
 
@@ -40,7 +28,7 @@ post-sprint re-alignment).
   from the registry, exec the correct server command.
 - Profile configs: `dev`/`reviewer` Goose (`GOOSE_MODE: smart_approve`,
   tracked `permission.yaml` policy), `ceo` Hermes (`SOUL.md`, `AGENTS.md`).
-- systemd templates were **removed** — deprecated by ADR-07 (Host Launcher).
+- systemd templates were removed — deprecated by ADR-07 (Host Launcher).
 
 ### Phase 3 — Control plane (Paperclip)
 - **Host Launcher Micro-API (ADR-07)**: `launcher.py` (:9000, `/launch`,
@@ -78,23 +66,29 @@ post-sprint re-alignment).
   serve is the contract); adapter secrets stored as Paperclip secret refs,
   not container env.
 - **Networking**: host firewall must `allow in on docker0` for container→host
-  traffic. Host Launcher binds **0.0.0.0:9000** (sprint correction) with a
+  traffic. Host Launcher binds **0.0.0.0:9000** (per ADR-07) with a
   **mandatory `X-Launcher-Secret`** header — container-originated triggers
   are the intended ADR-07 path.
 
 ## Pending / open items
 
-- **Phase 4 (re-opened)**: partial artifacts exist from the aborted
-  execution (`permission.yaml` policy — tracked, but its enforcement is
-  tool-name-level only; pattern rules still need the wrapper layer) and the
-  Hermes env-scrub is present in the installed build. **Nothing here is
-  acceptance-verified**: `/proc/<pid>/environ` smart_approve check, negative
-  permission tests, and the `execute_code` PYTHONPATH test must be re-run
-  and evidenced per `docs/phases/04-security-mitigations.md`.
-- **Phase 5 (re-opened)**: `watchdog-locks.sh` exists but its acceptance
-  criteria are unverified. The #6596 backoff deliverable must be re-planned —
-  the hand-rolled `backoff_proxy.py` was deleted as structural debt
-  (unwired, unreachable from any adapter config).
+- **Phase 4**: `permission.yaml` is tracked and enforced at the
+  tool-name level; pattern rules still require the wrapper enforcement
+  layer. The env-scrub is present in the installed Hermes build.
+  **None of the acceptance criteria are verified yet**: the
+  `/proc/<pid>/environ` smart_approve check, the negative permission tests,
+  and the `execute_code` PYTHONPATH test must be executed and evidenced per
+  `docs/phases/04-security-mitigations.md`.
+- **Phase 5**: `watchdog-locks.sh` is implemented; its acceptance criteria
+  are unverified. The #6596 backoff deliverable is to be implemented per
+  `docs/phases/05-reliability-watchdog.md`.
 - **Phase 6**: not started.
+- **State sync (ADR-08)**: `setup-sync.sh` / `sync-export.sh` /
+  `sync-import.sh` to be implemented per the ADR-08 contract (sanitized dumps
+  keeping `account`, excluding the five plaintext-secret tables; symlink
+  scaffold; SQLite + `*.sql.gz` hard-block). Spec v2.4 §ADR-08 documents the
+  consistency model; acceptance criteria: clean clone → setup → export →
+  second clone → import round-trip with no `*.db`, `*.sql.gz`, or plaintext
+  secret content in the private repo.
 - **Human step**: Paperclip one-time onboarding at <http://localhost:3000>
   (company + owner account), after which the smoke-ticket test can run.

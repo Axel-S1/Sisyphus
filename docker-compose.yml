@@ -38,6 +38,9 @@ services:
       PAPERCLIP_DEPLOYMENT_EXPOSURE: private
       PAPERCLIP_PUBLIC_URL: ${PAPERCLIP_PUBLIC_URL:-http://localhost:3000}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
+      # ── Trusted origins for Better Auth CORS (required when accessed via localhost) ──
+      TRUSTED_ORIGINS: http://localhost:3000
+      BETTER_AUTH_TRUSTED_ORIGINS: http://localhost:3000
       # ── LLM provider keys (at least one needed for agent runs; not required
       #    for Phase 3 smoke-ticket validation) ──
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

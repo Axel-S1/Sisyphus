@@ -47,6 +47,7 @@ A monorepo implementing a resilient, local-first multi-agent architecture where 
 | **ADR-05** | Paperclip mitigations: `sessionKeyStrategy: 'run'` + orphaned-lock watchdog + backoff |
 | **ADR-06** | **Per-profile port registry** (`ports.env`) — one port per profile |
 | **ADR-07** | **Host Launcher Micro-API** (`launcher.py` :9000) — on-demand spawn, 10-min idle teardown |
+| **ADR-08** | **State Synchronization** — private Git repo at `~/sisyphus-state/` (text configs + sanitized SQL dumps); ephemeral SQLite and secrets never sync |
 
 ---
 
@@ -203,6 +204,33 @@ GOOSE_PORT_REVIEWER=3285
 ```
 
 One port per profile — **two profiles on one port = guaranteed crash-loop** (ADR-06).
+
+### Multi-Machine State Sync (`~/sisyphus-state/`, ADR-08)
+
+The public repo is state-neutral. Your *portable* state — agent personas,
+engine configs, Hermes memories, and a **sanitized** Paperclip SQL dump —
+lives in a **private** Git repo at `~/sisyphus-state/` (created automatically;
+ephemeral SQLite DBs and secrets never sync — see ADR-08 in the spec).
+
+```bash
+# One-time, per machine (zero-friction setup):
+./execution-plane/scripts/setup-sync.sh        # scaffold + git init + symlinks
+
+# Leaving machine A:
+./execution-plane/scripts/sync-export.sh       # sanitized pg_dump + commit/push
+
+# Arriving on machine B:
+git -C ~/sisyphus-state pull
+./execution-plane/scripts/sync-import.sh       # restore dump (paperclip must be stopped)
+```
+
+Rules of thumb: export before you switch machines, import after you arrive,
+and never run agents on two machines against the same identity at once
+(async, last-writer-wins). Plaintext secret tables (`company_secrets`,
+`agent_api_keys`, …) are excluded from dumps — after an import, re-enter
+provider/agent API keys in the Paperclip UI. Logins survive the round-trip
+(the hashed `account` table is kept). Full-fidelity `.sql.gz` auto-backups
+are hard-blocked from the private repo.
 
 ### Firewall (Linux)
 

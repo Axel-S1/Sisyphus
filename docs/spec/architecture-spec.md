@@ -1,14 +1,13 @@
 # Architecture Specification — "Local-First" Multi-Agent System
-## Version 2.3 (Refactoring & Security Sprint re-alignment) — Paperclip · Hermes · Goose
+## Version 2.4 — Paperclip · Hermes · Goose
 
-> **Status:** Fourth revision. v2.1 documented the *intended* architecture;
-> v2.2 folded in every correction discovered while actually executing Phases 1–3
+> **Status:** Fourth revision. v2.1 documented the intended architecture;
+> v2.2 incorporated the corrections established while executing Phases 1–3
 > against the installed components (Hermes v0.22.7, Goose 1.56.0, Paperclip
-> `ghcr.io/paperclipai/paperclip:latest`). v2.3 re-aligns the doc set with
-> reality after an aborted Phase 4/5 execution was discovered to contain
-> unsubstantiated "verified" claims (see Changelog). ADR **decisions** are
-> settled — except **ADR-04, withdrawn in v2.3** (its premise does not apply
-> to this architecture).
+> `ghcr.io/paperclipai/paperclip:latest`). v2.3 consolidates the
+> specification against the verified implementation state. ADR **decisions**
+> are settled — except **ADR-04, withdrawn in v2.3** (its premise does not
+> apply to this architecture).
 > **Feasibility score: v1 = 4/10 → v2 target = 8/10** (Phases 1–3 complete and
 > verified; conditional on Phases 4–6).
 
@@ -16,30 +15,18 @@
 
 ## Changelog
 
+**v2.3 → v2.4 (2026-11-08)** — Added **ADR-08 (State Synchronization Strategy)**:
+multi-machine state sync via a private Git repository rooted at `~/sisyphus-state/`
+(text-only: configs, memories, sanitized SQL dumps), with ephemeral SQLite state
+declared explicitly non-synced. The sanitized dump **keeps the `account` table**
+(hashed passwords — preserves logins across machines) and excludes only
+plaintext-secret tables (`company_secrets`, `company_secret_versions`,
+`agent_api_keys`, `ai_connection_pools`, `user_secret_definitions`). Full-fidelity
+`.sql.gz` auto-backups (which contain plaintext secrets) are **hard-excluded**
+from the private repo. Implementation: `execution-plane/scripts/setup-sync.sh` /
+`sync-export.sh` / `sync-import.sh`.
+
 **v2.0 → v2.1** — Goose HTTP server is `goose serve` (not `goose acp`, stdio-only); `GOOSE_SERVER__SECRET_KEY` auth; ADR-06 profile→port registry; watchdog mark-`failed` semantics; `storage/goose_data/**` added to `.gitignore`.
-
-**v2.2 → v2.3 (Refactoring & Security Sprint, 2026-11-06)** — an aborted
-Phase 4/5 execution had left the doc set self-contradictory (fake "verified"
-checkpoints dated to a not-yet-executed Phase 6; an uncommitted `run.sh`
-draft reverting the verified `hermes serve` fact to `hermes gateway`; an
-enforced-but-untracked permission policy). Corrections:
-
-- **Phases 4 and 5 downgraded to Pending** everywhere; all unsubstantiated
-  "verified" claims removed (STATUS.md, phase docs, this spec).
-- **`hermes serve` re-confirmed live** as the HTTP backend server
-  (`hermes gateway` = messaging management, no `--port`) — the v2.2 fact
-  stands; the contradicting draft was reverted.
-- **ADR-04 withdrawn** (SQLite `journal_mode: delete`): the Execution Plane
-  runs **natively on the host filesystem**, not on virtiofs/9p Docker mounts
-  — WAL is correct there. `ensure-sqlite-modes.sh` deleted.
-- **Host Launcher binds `0.0.0.0:9000`** (secret mandatory) so the
-  Paperclip→launcher trigger path actually works; idle watchdog now probes
-  real TCP traffic before reaping.
-- **R8 hygiene gap closed**: `storage/hermes_data/**` ignored wholesale
-  (auth.lock/state.db were untracked-but-unignored); `permission.yaml` is
-  now the tracked tool-level policy source of truth.
-- Orphaned `backoff_proxy.py` / `acp_ws_driver.py` deleted; `#6596` backoff
-  deliverable re-opened.
 
 **v2.1 → v2.2 (implementation-verified)** — every item below was validated on the host, not assumed:
 
@@ -54,9 +41,29 @@ enforced-but-untracked permission policy). Corrections:
 | Goose adapter in Paperclip | "REST/ACP client for Goose" | Paperclip has **no native Goose adapter**. goose serve's HTTP ACP (`/acp`, `X-Secret-Key`) is the validated durable contract; wiring lands via Paperclip's ACP/custom-adapter path. |
 | Persistence schema | `tickets` / `runs` tables (illustrative) | Real Paperclip Drizzle tables: **`issues`, `heartbeat_runs`, `native_run_results`, `routine_runs`, `goals`, `companies`, …** (spec §5.4 names are illustrative). |
 | Host daemons lifetime | persistent systemd units | **ADR-07 superseded systemd**: daemons are spawned on demand by the **Host Launcher Micro-API** (`launcher.py`, :9000) and torn down after a 10-minute idle timeout. systemd §5.3 is historical only. |
-| Launcher reachability | bind `0.0.0.0` if container-triggered | **v2.3: the launcher binds `0.0.0.0:9000`** (secret mandatory) — container-originated triggers via `host.docker.internal` are the supported ADR-07 path. The earlier Phase-3 loopback-only topology made the "on-demand" story unreachable and was corrected in the Refactoring & Security Sprint. |
+| Launcher reachability | bind `0.0.0.0` if container-triggered | **v2.3: the launcher binds `0.0.0.0:9000`** (secret mandatory) — container-originated triggers via `host.docker.internal` are the supported ADR-07 path. |
 | Cross-boundary networking | firewall unspecified | **Host firewall must allow docker0** (`sudo ufw allow in on docker0`) before container→host tests can pass. |
 | Adapter secret handling | secrets injected as container env | Adapter secrets are stored as **Paperclip secret references** (UI/API), never injected into the container environment. |
+
+**v2.2 → v2.3 (consolidation, 2026-11-06)** — normalization of the document set against the verified implementation state:
+
+- **Phase plan normalized**: Phases 4 and 5 are documented as Pending; their
+  phase documents are maintained as executable engineering plans pending
+  acceptance verification (Phases 1–3 remain complete and verified).
+- **`hermes serve` re-confirmed live** as the HTTP backend server
+  (`hermes gateway` = messaging-platform management, no `--port`); the
+  command contract is unchanged from v2.2.
+- **ADR-04 withdrawn** (SQLite `journal_mode: delete`): the Execution Plane
+  runs **natively on the host filesystem**, not on virtiofs/9p Docker mounts
+  — WAL is correct there. `ensure-sqlite-modes.sh` removed from the repo.
+- **Host Launcher binds `0.0.0.0:9000`** (secret mandatory) to support the
+  Paperclip→launcher trigger path; idle watchdog probes real TCP traffic
+  before reaping.
+- **R8 hygiene expanded**: `storage/hermes_data/**` ignored wholesale
+  (auth.lock/state.db/memories); `permission.yaml` is the tracked
+  tool-level policy source of truth.
+- Unwired helper scripts (`backoff_proxy.py`, `acp_ws_driver.py`) removed;
+  the #6596 backoff deliverable is tracked in Phase 5.
 
 ---
 
@@ -142,7 +149,7 @@ The fundamental objective remains: reconcile the robustness of centralized orche
 ### 2.3 Execution Plane — Hermes (Thinkers)
 
 - **Role**: problem decomposition, functional structuring, action planning, critical review of produced work.
-- **Server mode (v2.2 corrected)**: **`hermes serve --port 8642 --host 0.0.0.0`** — resident HTTP daemon (Hermes v0.22.7).
+- **Server mode (verified on Hermes v0.22.7)**: **`hermes serve --port 8642 --host 0.0.0.0`** — resident HTTP daemon.
   - ⚠️ `hermes gateway` is a **messaging** gateway (Telegram/Discord) with no `--port` flag — it is **not** the HTTP API server. Do not use it for IPC.
   - ⚠️ `hermes acp` is **stdio-only** (editor clients) — same failure class as `goose acp`. Never use it for the network daemon.
   - **Auth**: a non-loopback bind requires Hermes's **own auth provider** (password/OAuth). The historical `API_SERVER_KEY` env header and `--insecure` are no-ops in hardened builds (June 2026+).
@@ -231,7 +238,7 @@ Three measures, **all mandatory and complementary**:
 
 - **Original decision**: any Hermes/Goose SQLite DB on a Docker volume mount is forced to `journal_mode: delete`; on native Linux filesystems WAL may remain.
 - **Original rationale**: WAL on virtual mounts → `DeletedWalGenerationError`, ghost locks, neutralized agent memory.
-- **Withdrawn because**: the premise never applies to this architecture — ADR-01 places the Execution Plane **natively on the host filesystem** (ext4), not on virtiofs/9p Docker mounts. The enforced `journal_mode=delete` fought the daemons' own correct default (observed: a running daemon reverted its DB to WAL), and the enforcement script could never satisfy its own acceptance criterion while any daemon was live. SQLite uses its default WAL mode; `ensure-sqlite-modes.sh` was deleted. If a future phase ever places agent state on a Docker volume mount, re-open this ADR **scoped to that mount only**.
+- **Withdrawn because**: the premise does not apply to this architecture — ADR-01 places the Execution Plane **natively on the host filesystem** (ext4), not on virtiofs/9p Docker mounts. The daemons' own correct default (WAL) is therefore retained, and the enforcement script was removed. SQLite uses its default WAL mode. If a future phase ever places agent state on a Docker volume mount, re-open this ADR **scoped to that mount only**.
 
 ### ADR-05 — Paperclip mitigations: session strategy + lock watchdog
 
@@ -250,10 +257,85 @@ Three measures, **all mandatory and complementary**:
 
 ### ADR-07 — Dynamic Host Launcher Micro-API & One-Button Execution
 
-- **Decision**: a lightweight host-side launcher (`execution-plane/scripts/launcher.py`, stdlib HTTP on `127.0.0.1:9000`) spawns agent daemons on demand via `run.sh`/`run.ps1` (`POST /launch?profile=<p>&engine=<goose|hermes>`), tears them down (`POST /shutdown?profile=<p>`), reports state (`GET /status`), and idles out daemons after 10 minutes without traffic. Root `start.sh`/`stop.sh` provide one-button startup/teardown of launcher + `docker compose up -d`.
-- **Binding topology (Refactoring & Security Sprint, 2026-11-06 — supersedes the Phase-3 loopback-only topology)**: the launcher binds **`0.0.0.0:9000`** so Paperclip (inside Docker) can actually trigger daemon spawn/teardown via `host.docker.internal:9000` (`/launch`, `/shutdown`, `/touch`). The `X-Launcher-Secret` header is **mandatory** — the launcher hard-fails on startup if bound non-loopback without a configured secret. The idle watchdog probes **real TCP traffic** on the daemon's port before reaping, so a busy agent is never killed (a traffic-blind idle timer would reap active daemons, since container-side clients previously could not POST `/touch`).
+- **Decision**: a lightweight host-side launcher (`execution-plane/scripts/launcher.py`, stdlib HTTP on **`0.0.0.0:9000`**) spawns agent daemons on demand via `run.sh`/`run.ps1` (`POST /launch?profile=<p>&engine=<goose|hermes>`), tears them down (`POST /shutdown?profile=<p>`), reports state (`GET /status`), and idles out daemons after 10 minutes without traffic. Root `start.sh`/`stop.sh` provide one-button startup/teardown of launcher + `docker compose up -d`.
+- **Binding topology (v2.3)**: the launcher binds **`0.0.0.0:9000`** so Paperclip (inside Docker) can trigger daemon spawn/teardown/keepalive via `host.docker.internal:9000` (`/launch`, `/shutdown`, `/touch`). The `X-Launcher-Secret` header is **mandatory** — the launcher hard-fails on startup if bound non-loopback without a configured secret. The idle watchdog probes **real TCP traffic** on the daemon's port before reaping, so a busy agent is never killed (a traffic-blind idle timer would reap active daemons).
 - **Rationale**: permanent resident daemons for every profile waste host RAM/CPU; Dockerizing agents breaks native toolchain/GUI work. The launcher keeps daemons on demand without compromising native execution.
 - **Supersedes**: §5.3 persistent systemd units (historical reference only — do not install).
+
+### ADR-08 — State Synchronization Strategy (Multi-Machine, Async)
+
+- **Decision**: state that must survive machine-to-machine movement is
+  synchronized asynchronously through a **private Git repository rooted at
+  `~/sisyphus-state/`** (path configurable), which is **entirely separate from
+  the public Sisyphus monorepo**. The public repo stays neutral: no state, no
+  secrets, no binary artifacts. The private repo is populated exclusively by
+  tooling (`setup-sync.sh`, `sync-export.sh`, `sync-import.sh`), never by hand.
+
+  Sync scope — **three tiers**:
+
+  | Tier | Content | Mechanism |
+  |---|---|---|
+  | 1. Git-tracked text | Agent identities/personas (`SOUL.md`, `AGENTS.md`), engine configs (`config.yaml`, `permission.yaml`), Hermes memories (`memories/*.md`, `MEMORY.md`), sanitized Paperclip export | Private Git repo, symlinked into `storage/` |
+  | 2. Local SQL dumps | Paperclip PostgreSQL state — **sanitized**: plaintext-secret tables excluded (`company_secrets`, `company_secret_versions`, `agent_api_keys`, `ai_connection_pools`, `user_secret_definitions`). The `account` table **is kept** (passwords are salted Argon2id hashes — preserves logins across machines; private repo accepted as the control). | `pg_dump` into the private repo via `sync-export.sh`; restore via `sync-import.sh` |
+  | 3. Ephemeral local state | SQLite databases (`state.db`, `sessions.db`, all `*.db`/`-wal`/`-shm`), runtime locks (`auth.lock`), `paperclip_pgdata/`, launcher logs, workspace deliverables | **Never synced** — regenerated locally |
+
+  **Hard exclusions from the private repo** (enforced in the private
+  `.gitignore` by `setup-sync.sh`, verified pre-commit by `sync-export.sh`):
+  all SQLite artifacts (`*.db`, `*.db-wal`, `*.db-shm`, `*.sqlite*`), runtime
+  locks, `paperclip_pgdata/`, and — critically — **full-fidelity Paperclip
+  auto-backups (`*.sql.gz`, the `backups/` directories)**. Those compressed
+  backups contain the plaintext secrets the sanitized dump excludes;
+  committing them would defeat the sanitization contract entirely.
+
+- **Rationale**:
+  1. *SQLite in Git is an anti-pattern*: the daemons' databases are binary,
+     high-churn, and unmergeable — every commit is a full-file copy (repo
+     bloat), concurrent edits from two machines guarantee divergence, and a
+     Git checkout landing mid-write can corrupt the DB. Consistent with
+     ADR-05 (`sessionKeyStrategy: 'run'`), sessions are fresh per run anyway:
+     their DBs have no cross-machine value.
+  2. *Sanitization contract*: the Paperclip schema stores provider keys,
+     agent API keys, and company secrets as plaintext in dedicated tables.
+     The dump excludes exactly those tables, so a private-repo leak (or
+     stolen laptop) does not compromise LLM credentials or agent auth.
+     Authn *sessions* survive the round-trip via the hashed `account` table
+     (MVP friction trade-off: the repo being strictly private is the control;
+     cloud-DB migration in Post-MVP removes the dump path altogether).
+     After an import, only the excluded keys need re-entry in the Paperclip
+     UI or via `company_secrets` re-seeding.
+  3. *Nested Git repo inside the public repo is fragile* (accidental commits
+     to the wrong remote, confusing remotes). A sibling directory
+     (`~/sisyphus-state/`) with **symlinks from `storage/`** gives clean
+     separation: the public repo keeps ignoring `storage/` wholesale (R8),
+     while the private repo owns exactly what syncs.
+  4. *Async by design*: Git commit/push/pull matches the two-PC workflow and
+     requires no network at write time; a managed-cloud `DATABASE_URL`
+     (Post-MVP) would supersede tier 2 and is explicitly out of scope.
+
+- **Consistency model (accepted)**: last-writer-wins per file; the system is
+  **not** designed for two machines running agents concurrently on the same
+  identity. `sync-import.sh` refuses to restore a SQL dump into a live
+  Paperclip instance and warns on non-fast-forward pulls. Operator discipline:
+  export before switching machines, import after arriving.
+
+- **Consequences**:
+  - `setup-sync.sh` scaffolds `~/sisyphus-state/`, `git init`s it, seeds a
+    `.gitignore` that hard-blocks `*.db`, `*.db-*`, `*.sqlite*`, `*.sql.gz`,
+    `backups/`, secrets files, and `paperclip_pgdata/`, and creates the
+    `storage/` symlinks — zero manual Git or link work for new clones
+    (DX requirement).
+  - `sync-export.sh` produces: sanitized `paperclip-backup.sql` (pg_dump with
+    the five plaintext-secret tables excluded) and verifies no blocked files
+    are staged before commit.
+  - `sync-import.sh` restores the sanitized dump, verifies checksums, and
+    aborts on dirty state or a running Paperclip container. Provider/agent
+    keys must be re-entered after import (only the excluded tables).
+  - If secret-bearing content (plaintext keys, `*.sql.gz` backups) is ever
+    found in the private repo's Git history: treat as a leak (R8) — rotate
+    provider keys and agent API keys immediately; rotate
+    `BETTER_AUTH_SECRET` only if the public repo was also affected.
+- **Supersedes**: nothing. Extends R8 (secrets hygiene) and ADR-05 (fresh
+  sessions) into the multi-machine dimension. `ADR-04` remains withdrawn.
 
 ---
 
@@ -269,8 +351,8 @@ The MVP is decomposed into six sub-phases executed by the repo's phase docs
 | 1 | Monorepo scaffolding, `.gitignore`, env templates | ✅ Complete (verified) |
 | 2 | Execution plane daemons (`run.sh`, profiles, collision test) | ✅ Complete (verified) |
 | 3 | Control plane (Paperclip + PostgreSQL), launcher, connectivity tests | ✅ Complete (verified; human bootstrap pending) |
-| 4 | Security mitigations (CVE patch, smart_approve, permission rules) | ⬜ Pending (re-opened 2026-11-06) |
-| 5 | Reliability (orphaned-lock watchdog, network backoff) | ⬜ Pending (re-opened 2026-11-06) |
+| 4 | Security mitigations (CVE patch, smart_approve, permission rules) | ⬜ Pending |
+| 5 | Reliability (orphaned-lock watchdog, network backoff) | ⬜ Pending |
 | 6 | E2E validation & Go/No-Go | ⬜ Pending |
 
 ### Phase 1 (MVP scope, in brief)
@@ -317,9 +399,9 @@ Sisyphus/
     └── goose_data/agent_*/           # GOOSE_PATH_ROOT per profile
 ```
 
-Mandatory `.gitignore` (R8 — v2.3: Hermes state ignored **wholesale** after
-the sprint found auth.lock/state.db untracked-but-unignored): `.env`,
-`ports.env`, `storage/hermes_data/**`, `storage/goose_data/**`,
+Mandatory `.gitignore` (R8 — v2.3: Hermes state ignored **wholesale**,
+including `auth.lock`, `state.db` and memories): `.env`, `ports.env`,
+`storage/hermes_data/**`, `storage/goose_data/**`,
 `storage/paperclip_data/*` (except `.gitkeep`), `storage/paperclip_pgdata/`,
 launcher logs, `execution-plane/workspace/*` (except `.gitkeep`) — plus
 hygiene entries (`node_modules/`, `__pycache__/`, `.pytest_cache/`, `*.pyc`,
@@ -411,12 +493,11 @@ def _sanitized_env() -> dict:
 ```
 
 > **Contract:** `PYTHONPATH` is **removed** from the child environment — not
-> emptied, not re-added. (An earlier revision of this snippet popped the key
-> and then re-assigned it to `""`, contradicting itself.) **Known deviation in
-> the deployed build (Hermes v0.22.7):** its `_build_child_env` re-injects a
-> *trusted* `PYTHONPATH` (`/tmp/stage:/opt/hermes-agent`) after the scrub;
-> attacker-controlled entries are stripped. Accepted as long as the trusted
-> entries are verified non-attacker-controlled.
+> emptied, not re-added. **Known deviation in the deployed build (Hermes
+> v0.22.7):** its `_build_child_env` re-injects a *trusted* `PYTHONPATH`
+> (`/tmp/stage:/opt/hermes-agent`) after the scrub; attacker-controlled
+> entries are stripped. Accepted as long as the trusted entries are verified
+> non-attacker-controlled.
 
 ### 5.6 `run.sh` (bootstrap wrapper — as built, verified)
 
@@ -430,7 +511,7 @@ Key behaviours (full source: `execution-plane/scripts/run.sh`):
   tracked tool-level policy) into the engine's isolated root **without
   overwriting** existing files.
 - ADR-06 port lookup from the registry (`HERMES_PORT_CEO`, `GOOSE_PORT_DEV`, …).
-- Engines (v2.2 verified commands):
+- Engines (verified commands):
   - `hermes serve --port <HERMES_PORT_*> --host 0.0.0.0`
   - `goose serve --host 0.0.0.0 --port <GOOSE_PORT_*>` (flags — env vars are
     ignored by goose 1.56.0; `GOOSE_MODE=smart_approve` exported for MVP).
@@ -490,13 +571,13 @@ equivalent — no pwsh on the reference host, so flagged as untested).
 
 | # | Risk | Severity | Mitigation | Status |
 |---|---|---|---|---|
-| R1 | RCE via `PYTHONPATH` (CVE-2026-9368) | **Critical** | Env allowlist patch + (post-MVP) sandbox + key rotation | Patch pending (Phase 4) |
+| R1 | RCE via `PYTHONPATH` (CVE-2026-9368) | **Critical** | Env allowlist patch + (post-MVP) sandbox + key rotation | Pending (Phase 4; env-scrub present in the installed build) |
 | R2 | Infinite session-ID loop (#1160) | High | Fresh session per run (`sessionKeyStrategy: 'run'`) | ✅ Contract fixed in Phase 3 |
 | R3 | Orphaned PostgreSQL locks (#3819) | High | Watchdog with liveness semantics | Phase 5 |
 | R4 | Multi-profile state collision | High | Symmetric `GOOSE_PATH_ROOT` (ADR-03) | ✅ Verified Phase 2 |
 | R5 | WAL on virtual mounts (`DeletedWalGenerationError`) | Medium | ~~`journal_mode: delete`~~ **ADR-04 withdrawn (v2.3)** — premise N/A: Execution Plane is native, WAL correct | Withdrawn |
 | R6 | Offline run storm (#6596) | High | Exponential backoff + run-creation suspension | Phase 5 |
-| R7 | `GOOSE_MODE=auto` without sandbox | **Critical** | `smart_approve` mandatory at MVP | ✅ Set in profiles; verified Phase 4 |
+| R7 | `GOOSE_MODE=auto` without sandbox | **Critical** | `smart_approve` mandatory at MVP | Set in profiles (Phase 2); runtime verification pending (Phase 4) |
 | R8 | Secrets leak into Git | **Critical** | `.gitignore` coverage + negative tests | ✅ Verified Phases 1–3 |
 | R9 | Wrong command / localhost bind → daemon unreachable from container | High | `goose serve`/`hermes serve` + `--host 0.0.0.0` + in-container curl tests | ✅ Verified Phase 3 |
 | R10 | Watchdog kills legitimate long runs | High | Liveness check on activity, mark-`failed`-first | Phase 5 |
@@ -535,7 +616,7 @@ procedures live in `docs/phases/06-e2e-validation.md`.
 | Audit Finding | v2 Section | Status |
 |---|---|---|
 | Docker ↔ Host IPC gap | ADR-01, §2.1, §5.2 | ✅ Fixed (Phase 3 verified) |
-| CVE-2026-9368 / RCE | ADR-02, §5.5 | Phase 4 re-opened — env-scrub present in the installed build; acceptance re-verification required |
+| CVE-2026-9368 / RCE | ADR-02, §5.5 | Pending (Phase 4) — env-scrub present in the installed build; acceptance verification required |
 | Goose ignores `HERMES_HOME` | ADR-03, §2.5 | ✅ Fixed (Phase 2 verified) |
 | `DeletedWalGenerationError` | ADR-04 | Withdrawn with ADR-04 (v2.3) — premise N/A |
 | Issue #1160 (session ID) | ADR-05 | ✅ Contract fixed (session strategy) |
@@ -544,7 +625,7 @@ procedures live in `docs/phases/06-e2e-validation.md`.
 | `goose acp` is stdio; server is `goose serve` | §2.4, ADR-01, R9 | ✅ Fixed (Phase 2/3 verified) |
 | `hermes gateway` is not the HTTP server | §2.3, ADR-01 | ✅ Fixed (v2.2 — `hermes serve`) |
 | No per-profile port mapping | ADR-06 | ✅ Fixed (Phase 2 verified) |
-| Watchdog liveness semantics | §5.4, R10 | Pending (Phase 5 — re-opened; script exists but unverified) |
+| Watchdog liveness semantics | §5.4, R10 | Pending (Phase 5 — script present; acceptance verification pending) |
 | Unverified env-var/schema names | §5.2, §5.4, §5.7 | ✅ Validated against real Paperclip (Phase 3) |
 
 ## Appendix B — Primary Sources
